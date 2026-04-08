@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visualization Results</title>
+  <style>
+    :root {
+      --bg: #0f1220;
+      --panel: #171b2e;
+      --panel-alt: #1d233b;
+      --border: #2d3658;
+      --text: #eef2ff;
+      --muted: #a8b1d1;
+      --accent: #7dd3fc;
+      --accent-2: #c084fc;
+      --success: #86efac;
+      --warning: #fde68a;
+      --danger: #fca5a5;
+      --running: #93c5fd;
+      --shadow: 0 18px 50px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      background:
+        radial-gradient(circle at top left,  rgba(125,211,252,.12), transparent 28%),
+        radial-gradient(circle at top right, rgba(192,132,252,.14), transparent 24%),
+        linear-gradient(180deg, #0b0e18, var(--bg));
+      color: var(--text);
+      font-family: "Segoe UI", Arial, sans-serif;
+    }
+    .page { width: min(1500px, calc(100vw - 32px)); margin: 0 auto; padding: 24px 0 48px; }
+
+    /* ── nav ── */
+    .nav { display:flex; gap:8px; margin-bottom:20px; padding:6px; border:1px solid var(--border); border-radius:14px; background:rgba(23,27,46,.9); width:fit-content; }
+    .nav a { padding:8px 20px; border-radius:10px; text-decoration:none; color:var(--muted); font-size:14px; font-weight:600; transition:background .15s, color .15s; }
+    .nav a.active { background:rgba(125,211,252,.18); color:var(--accent); }
+    .nav a:hover:not(.active) { background:rgba(255,255,255,.06); color:var(--text); }
+
+    /* ── hero ── */
+    .hero { display:flex; justify-content:space-between; gap:16px; padding:24px; border:1px solid var(--border); border-radius:20px; background:linear-gradient(180deg,rgba(29,35,59,.95),rgba(18,22,37,.95)); box-shadow:var(--shadow); margin-bottom:20px; flex-wrap:wrap; }
+    .hero h1 { margin:0 0 8px; font-size:28px; }
+    .hero p  { margin:0; color:var(--muted); line-height:1.6; font-size:14px; }
+    .stats { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; }
+    .stat { min-width:110px; padding:12px 14px; border:1px solid var(--border); border-radius:14px; background:rgba(23,27,46,.92); }
+    .stat .label { display:block; color:var(--muted); font-size:11px; margin-bottom:6px; text-transform:uppercase; letter-spacing:.08em; }
+    .stat .value { font-size:20px; font-weight:700; }
+
+    /* ── controls ── */
+    .controls { display:flex; gap:12px; margin-bottom:20px; align-items:center; flex-wrap:wrap; }
+    .search-box { flex:1; min-width:200px; display:flex; gap:10px; align-items:center; padding:12px 16px; border:1px solid var(--border); border-radius:14px; background:rgba(23,27,46,.92); box-shadow:var(--shadow); }
+    .search-box input { flex:1; border:0; outline:0; background:transparent; color:var(--text); font-size:14px; }
+    .search-box span { color:var(--muted); font-size:13px; white-space:nowrap; }
+    .filter-btns { display:flex; gap:6px; }
+    .filter-btn { padding:9px 14px; border:1px solid var(--border); border-radius:10px; background:transparent; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; transition:background .15s, color .15s; }
+    .filter-btn.active { background:rgba(125,211,252,.14); color:var(--accent); border-color:rgba(125,211,252,.4); }
+
+    /* ── refresh btn ── */
+    .btn-refresh { padding:10px 16px; border:1px solid var(--border); border-radius:12px; background:transparent; color:var(--text); font-size:13px; cursor:pointer; white-space:nowrap; }
+    .btn-refresh:hover { background:rgba(255,255,255,.08); }
+
+    /* ── grid ── */
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:18px; }
+    .card { position:relative; border:1px solid var(--border); border-radius:18px; background:linear-gradient(180deg,rgba(23,27,46,.97),rgba(17,20,33,.97)); box-shadow:var(--shadow); overflow:hidden; transition:transform .18s, border-color .18s; }
+    .card.clickable { cursor:pointer; }
+    .card.clickable:hover { transform:translateY(-3px); border-color:rgba(125,211,252,.45); }
+
+    .thumb { aspect-ratio:16/9; width:100%; object-fit:cover; display:block; background:#0a0d16; }
+
+    /* status badge */
+    .status-badge { position:absolute; top:10px; right:10px; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:700; }
+    .status-badge.pending   { background:rgba(253,230,138,.15); color:var(--warning); border:1px solid rgba(253,230,138,.3); }
+    .status-badge.running   { background:rgba(147,197,253,.15); color:var(--running); border:1px solid rgba(147,197,253,.3); }
+    .status-badge.stitching { background:rgba(192,132,252,.15); color:var(--accent-2); border:1px solid rgba(192,132,252,.3); }
+    .status-badge.completed { background:rgba(134,239,172,.15); color:var(--success); border:1px solid rgba(134,239,172,.3); }
+    .status-badge.failed    { background:rgba(252,165,165,.15); color:var(--danger);  border:1px solid rgba(252,165,165,.3); }
+
+    /* progress bar */
+    .progress-wrap { height:3px; background:rgba(255,255,255,.06); }
+    .progress-bar  { height:100%; background:var(--running); transition:width .3s; }
+
+    .card-body { padding:14px; }
+    .card-header { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
+    .card-title  { margin:0; font-size:16px; }
+    .badge { padding:4px 8px; border-radius:999px; background:rgba(125,211,252,.16); color:var(--accent); font-size:11px; font-weight:700; white-space:nowrap; }
+    .meta { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+    .meta-item { padding:9px 11px; border-radius:10px; background:var(--panel-alt); }
+    .meta-item .label { display:block; color:var(--muted); font-size:10px; margin-bottom:4px; text-transform:uppercase; letter-spacing:.08em; }
+    .meta-item .value { font-size:13px; font-weight:600; word-break:break-all; }
+    .card-footer { padding:0 14px 12px; display:flex; justify-content:space-between; align-items:center; }
+    .log-line { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:230px; }
+    .delete-btn { background:transparent; border:1px solid rgba(252,165,165,.3); color:var(--danger); border-radius:8px; padding:4px 10px; font-size:11px; cursor:pointer; }
+    .delete-btn:hover { background:rgba(252,165,165,.1); }
+
+    /* ── video modal ── */
+    .modal-backdrop { position:fixed; inset:0; background:rgba(5,8,18,.8); backdrop-filter:blur(6px); z-index:1000; display:none; align-items:center; justify-content:center; padding:24px; }
+    .modal-backdrop.open { display:flex; }
+    .modal-panel { width:min(960px,100%); max-height:calc(100vh - 48px); display:flex; flex-direction:column; border-radius:20px; border:1px solid var(--border); background:var(--panel); box-shadow:var(--shadow); overflow:hidden; }
+    .modal-header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border); flex-shrink:0; }
+    .modal-header h2 { margin:0; font-size:18px; }
+    .modal-close { background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--muted); padding:6px 13px; cursor:pointer; font-size:13px; }
+    .modal-close:hover { color:var(--text); }
+    .modal-video-wrap { flex:1; min-height:0; background:#000; display:flex; align-items:center; justify-content:center; }
+    video.modal-video { max-width:100%; max-height:calc(100vh - 180px); display:block; }
+    .modal-info { padding:14px 20px; border-top:1px solid var(--border); font-size:12px; color:var(--muted); display:flex; gap:20px; flex-wrap:wrap; }
+
+    /* log modal */
+    .log-modal-panel { width:min(760px,100%); max-height:calc(100vh - 80px); display:flex; flex-direction:column; border-radius:20px; border:1px solid var(--border); background:var(--panel); box-shadow:var(--shadow); overflow:hidden; }
+    .log-body { flex:1; overflow-y:auto; padding:16px 20px; font-family:monospace; font-size:12px; line-height:1.6; color:#c9d1d9; white-space:pre-wrap; background:#0d1117; }
+
+    .empty, .loading { padding:32px; border:1px dashed var(--border); border-radius:18px; text-align:center; color:var(--muted); background:rgba(23,27,46,.72); }
+
+    @media (max-width:700px) { .hero { flex-direction:column; } .controls { flex-direction:column; } }
+
+    /* spinner */
+    .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(147,197,253,.3); border-top-color:var(--running); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:6px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div class="page">
+  <nav class="nav">
+    <a href="clips.html">Clips</a>
+    <a href="results.html" class="active">Results</a>
+  </nav>
+
+  <section class="hero">
+    <div>
+      <h1>Visualization Results</h1>
+      <p>点击已完成的卡片播放 MP4；running 状态的任务每 5 秒自动刷新。</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><span class="label">Total</span><span class="value" id="statTotal">—</span></div>
+      <div class="stat"><span class="label">Running</span><span class="value" id="statRunning" style="color:var(--running)">—</span></div>
+      <div class="stat"><span class="label">Done</span><span class="value" id="statDone" style="color:var(--success)">—</span></div>
+      <div class="stat"><span class="label">Failed</span><span class="value" id="statFailed" style="color:var(--danger)">—</span></div>
+    </div>
+  </section>
+
+  <section class="controls">
+    <div class="search-box">
+      <span>Filter</span>
+      <input id="searchInput" type="text" placeholder="Search by clip id or job id">
+    </div>
+    <div class="filter-btns">
+      <button class="filter-btn active" data-status="all">All</button>
+      <button class="filter-btn" data-status="pending">Pending</button>
+      <button class="filter-btn" data-status="running">Running</button>
+      <button class="filter-btn" data-status="stitching">Stitching</button>
+      <button class="filter-btn" data-status="completed">Completed</button>
+      <button class="filter-btn" data-status="failed">Failed</button>
+    </div>
+    <button class="btn-refresh" id="btnRefresh">刷新</button>
+  </section>
+
+  <div id="content" class="loading">Loading jobs…</div>
+</div>
+
+<!-- Video playback modal -->
+<div class="modal-backdrop" id="videoModal">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h2 id="videoModalTitle">—</h2>
+      <button class="modal-close" id="videoModalClose">关闭</button>
+    </div>
+    <div class="modal-video-wrap">
+      <video class="modal-video" id="modalVideo" controls></video>
+    </div>
+    <div class="modal-info" id="videoModalInfo"></div>
+  </div>
+</div>
+
+<!-- Log modal -->
+<div class="modal-backdrop" id="logModal">
+  <div class="log-modal-panel">
+    <div class="modal-header">
+      <h2 id="logModalTitle">Job Log</h2>
+      <button class="modal-close" id="logModalClose">关闭</button>
+    </div>
+    <pre class="log-body" id="logBody"></pre>
+  </div>
+</div>
+
+<script>
+  const API = "";
+  let allJobs = [];
+  let filterStatus = "all";
+  let autoRefreshTimer = null;
+
+  const content       = document.getElementById("content");
+  const searchInput   = document.getElementById("searchInput");
+  const statTotal     = document.getElementById("statTotal");
+  const statRunning   = document.getElementById("statRunning");
+  const statDone      = document.getElementById("statDone");
+  const statFailed    = document.getElementById("statFailed");
+  const videoModal    = document.getElementById("videoModal");
+  const videoModalTitle = document.getElementById("videoModalTitle");
+  const videoModalClose = document.getElementById("videoModalClose");
+  const modalVideo    = document.getElementById("modalVideo");
+  const videoModalInfo= document.getElementById("videoModalInfo");
+  const logModal      = document.getElementById("logModal");
+  const logModalTitle = document.getElementById("logModalTitle");
+  const logModalClose = document.getElementById("logModalClose");
+  const logBody       = document.getElementById("logBody");
+  const btnRefresh    = document.getElementById("btnRefresh");
+
+  function resolveImgSrc(p) {
+    if (!p) return "";
+    if (p.startsWith("../")) return "/" + p.slice(3);
+    return p;
+  }
+
+  function fmtTime(ts) {
+    if (!ts) return "—";
+    return new Date(ts * 1000).toLocaleString();
+  }
+
+  function fmtStatus(s) {
+    const map = { pending:"Pending", running:"Running", stitching:"Stitching", completed:"Completed", failed:"Failed" };
+    return map[s] || s;
+  }
+
+  // ── video modal ───────────────────────────────────────────────────────────
+  function openVideo(job) {
+    videoModalTitle.textContent = `${job.clip_id}  ·  ${job.job_id.slice(0,8)}`;
+    modalVideo.src = `${API}/api/jobs/${job.job_id}/video`;
+    modalVideo.load();
+    videoModalInfo.innerHTML = `
+      <span>Job ID: ${job.job_id}</span>
+      <span>Frames: ${job.total}</span>
+      <span>Created: ${fmtTime(job.created_at)}</span>
+      <span>Updated: ${fmtTime(job.updated_at)}</span>
+    `;
+    videoModal.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeVideo() {
+    modalVideo.pause();
+    modalVideo.src = "";
+    videoModal.classList.remove("open");
+    document.body.style.overflow = "";
+  }
+
+  videoModalClose.addEventListener("click", closeVideo);
+  videoModal.addEventListener("click", e => { if (e.target === videoModal) closeVideo(); });
+
+  // ── log modal ─────────────────────────────────────────────────────────────
+  function openLog(job) {
+    logModalTitle.textContent = `Log: ${job.clip_id} · ${job.job_id.slice(0,8)}`;
+    logBody.textContent = job.log || "(no log)";
+    logModal.classList.add("open");
+    document.body.style.overflow = "hidden";
+    logBody.scrollTop = logBody.scrollHeight;
+  }
+
+  logModalClose.addEventListener("click", () => {
+    logModal.classList.remove("open");
+    document.body.style.overflow = "";
+  });
+  logModal.addEventListener("click", e => {
+    if (e.target === logModal) { logModal.classList.remove("open"); document.body.style.overflow = ""; }
+  });
+
+  window.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      if (videoModal.classList.contains("open")) closeVideo();
+      if (logModal.classList.contains("open")) { logModal.classList.remove("open"); document.body.style.overflow = ""; }
+    }
+  });
+
+  // ── delete ────────────────────────────────────────────────────────────────
+  async function deleteJob(jobId) {
+    if (!confirm("确认删除该任务及其产物？")) return;
+    try {
+      const r = await fetch(`${API}/api/jobs/${jobId}`, { method: "DELETE" });
+      if (!r.ok) throw new Error(await r.text());
+      await load();
+    } catch (err) {
+      alert(`删除失败: ${err.message}`);
+    }
+  }
+
+  // ── card rendering ────────────────────────────────────────────────────────
+  function createCard(job) {
+    const card = document.createElement("article");
+    card.className = `card${job.status === "completed" ? " clickable" : ""}`;
+
+    // thumbnail
+    const img = document.createElement("img");
+    img.className = "thumb";
+    img.loading = "lazy";
+    img.src = resolveImgSrc(job.thumbnail_path);
+    img.alt = job.clip_id;
+
+    // status badge
+    const badge = document.createElement("span");
+    badge.className = `status-badge ${job.status}`;
+    if (job.status === "running" || job.status === "stitching") {
+      badge.innerHTML = `<span class="spinner"></span>${fmtStatus(job.status)}`;
+    } else {
+      badge.textContent = fmtStatus(job.status);
+    }
+
+    // progress bar
+    const pWrap = document.createElement("div");
+    pWrap.className = "progress-wrap";
+    const pBar = document.createElement("div");
+    pBar.className = "progress-bar";
+    const pct = job.total > 0 ? Math.round((job.progress / job.total) * 100) : 0;
+    pBar.style.width = (job.status === "completed" ? 100 : pct) + "%";
+    if (job.status === "completed") pBar.style.background = "var(--success)";
+    else if (job.status === "failed") pBar.style.background = "var(--danger)";
+    pWrap.appendChild(pBar);
+
+    const body = document.createElement("div");
+    body.className = "card-body";
+    body.innerHTML = `
+      <div class="card-header">
+        <h2 class="card-title">${job.clip_id}</h2>
+        <span class="badge">${job.frame_count || "—"} frames</span>
+      </div>
+      <div class="meta">
+        <div class="meta-item"><span class="label">Status</span><span class="value">${fmtStatus(job.status)}${job.total > 0 ? ` (${pct}%)` : ""}</span></div>
+        <div class="meta-item"><span class="label">Job ID</span><span class="value">${job.job_id.slice(0,10)}…</span></div>
+        <div class="meta-item"><span class="label">Created</span><span class="value">${fmtTime(job.created_at)}</span></div>
+        <div class="meta-item"><span class="label">Updated</span><span class="value">${fmtTime(job.updated_at)}</span></div>
+      </div>`;
+
+    const footer = document.createElement("div");
+    footer.className = "card-footer";
+    const logLine = document.createElement("span");
+    logLine.className = "log-line";
+    const lastLine = (job.log || "").trim().split("\n").filter(Boolean).pop() || "";
+    logLine.textContent = lastLine || "—";
+    logLine.title = "点击查看完整日志";
+    logLine.style.cursor = "pointer";
+    logLine.addEventListener("click", e => { e.stopPropagation(); openLog(job); });
+
+    const del = document.createElement("button");
+    del.className = "delete-btn";
+    del.textContent = "删除";
+    del.addEventListener("click", e => { e.stopPropagation(); deleteJob(job.job_id); });
+
+    footer.appendChild(logLine);
+    footer.appendChild(del);
+
+    card.appendChild(img);
+    card.appendChild(badge);
+    card.appendChild(pWrap);
+    card.appendChild(body);
+    card.appendChild(footer);
+
+    if (job.status === "completed") {
+      card.addEventListener("click", () => openVideo(job));
+    }
+
+    return card;
+  }
+
+  function render(jobs) {
+    if (!jobs.length) {
+      content.className = "empty";
+      content.textContent = filterStatus === "all" ? "还没有任务。去 Clips 页面选择 clip 并提交可视化任务。" : "没有匹配的任务。";
+      return;
+    }
+    content.className = "grid";
+    content.innerHTML = "";
+    jobs.forEach(j => content.appendChild(createCard(j)));
+  }
+
+  function applyFilter(jobs) {
+    let result = [...jobs];
+    const q = searchInput.value.trim().toLowerCase();
+    if (q) result = result.filter(j => j.clip_id.includes(q) || j.job_id.includes(q));
+    if (filterStatus !== "all") result = result.filter(j => j.status === filterStatus);
+    return result;
+  }
+
+  function updateStats(jobs) {
+    statTotal.textContent   = jobs.length;
+    statRunning.textContent = jobs.filter(j => j.status === "running" || j.status === "stitching").length;
+    statDone.textContent    = jobs.filter(j => j.status === "completed").length;
+    statFailed.textContent  = jobs.filter(j => j.status === "failed").length;
+  }
+
+  function scheduleAutoRefresh(jobs) {
+    if (autoRefreshTimer) clearTimeout(autoRefreshTimer);
+    const hasActive = jobs.some(j => j.status === "running" || j.status === "stitching" || j.status === "pending");
+    if (hasActive) autoRefreshTimer = setTimeout(() => load(true), 5000);
+  }
+
+  async function load(silent = false) {
+    if (!silent) {
+      content.className = "loading";
+      content.textContent = "Loading jobs…";
+    }
+    try {
+      const r = await fetch(`${API}/api/jobs`);
+      const data = await r.json();
+      allJobs = data.jobs || [];
+      updateStats(allJobs);
+      render(applyFilter(allJobs));
+      scheduleAutoRefresh(allJobs);
+    } catch (err) {
+      if (!silent) {
+        content.className = "empty";
+        content.textContent = `加载失败: ${err.message}`;
+      }
+    }
+  }
+
+  // ── filter buttons ────────────────────────────────────────────────────────
+  document.querySelectorAll(".filter-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      filterStatus = btn.dataset.status;
+      render(applyFilter(allJobs));
+    });
+  });
+
+  searchInput.addEventListener("input", () => render(applyFilter(allJobs)));
+  btnRefresh.addEventListener("click", () => load());
+
+  load();
+</script>
+</body>
+</html>

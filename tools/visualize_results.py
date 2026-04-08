@@ -350,22 +350,30 @@ def run_inference(cfg, checkpoint_path, max_samples=-1, tokens=None):
     model.eval()
 
     dataset = build_dataset(cfg.data.val)
+    full_count = len(dataset._nusc_infos)
+
+    if tokens is not None:
+        target_set = set(tokens)
+        dataset._nusc_infos = [
+            info for info in dataset._nusc_infos if info["token"] in target_set
+        ]
+        print(f"Filtered dataset: {len(dataset._nusc_infos)}/{full_count} samples "
+              f"matching {len(target_set)} target tokens")
+
+    if max_samples > 0:
+        dataset._nusc_infos = dataset._nusc_infos[:max_samples]
+
+    workers = min(cfg.data.workers_per_gpu, len(dataset._nusc_infos))
+
     data_loader = build_dataloader(
         dataset,
         batch_size=1,
-        workers_per_gpu=cfg.data.workers_per_gpu,
+        workers_per_gpu=workers,
         dist=False,
         shuffle=False,
     )
 
     infos_list = dataset._nusc_infos
-
-    if tokens is not None:
-        target_tokens = set(tokens)
-    elif max_samples > 0:
-        target_tokens = None
-    else:
-        target_tokens = None
 
     predictions = {}
     cpu_device = torch.device("cpu")
@@ -382,15 +390,8 @@ def run_inference(cfg, checkpoint_path, max_samples=-1, tokens=None):
                     output[k] = v.to(cpu_device)
             predictions[token] = output
 
-        if (i + 1) % 50 == 0 or i == total - 1:
+        if (i + 1) % 10 == 0 or i == total - 1:
             print(f"  [{i+1}/{total}]")
-
-        if target_tokens and token in target_tokens:
-            target_tokens.discard(token)
-            if not target_tokens:
-                break
-        elif max_samples > 0 and len(predictions) >= max_samples:
-            break
 
     print(f"  Inference done: {len(predictions)} predictions")
     return predictions, infos_list
