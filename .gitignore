@@ -15,3 +15,4 @@ venv/
 debug/
 work_dirs/
 node_modules/
+reference/
