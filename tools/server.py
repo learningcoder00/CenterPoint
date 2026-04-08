@@ -29,8 +29,8 @@ from pydantic import BaseModel
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CLIPS_META_PATH = PROJECT_ROOT / "clip_preview" / "clips_meta.json"
-FRONTEND_DIR = PROJECT_ROOT / "tools" / "frontend"
-DATA_DIR = PROJECT_ROOT  # static files root (serves clip_preview images etc.)
+VUE_DIST_DIR = PROJECT_ROOT / "tools" / "frontend-vue" / "dist"
+DATA_DIR = PROJECT_ROOT
 
 # ── populated at startup from CLI args ──────────────────────────────────────
 _DEFAULT_CONFIG: str = ""
@@ -208,15 +208,18 @@ async def server_config():
 # Static files: data images (for clip thumbnails) + frontend pages
 # ─────────────────────────────────────────────────────────────────────────────
 
-@app.get("/")
-async def index_redirect():
-    return RedirectResponse(url="/clips.html")
-
-# Serve project root so clip thumbnail paths (../data/nuscenes/...) resolve
-# follow_symlink=True is required because data/nuscenes/v1.0.0 is a symlink to the dataset mount
 app.mount("/data", StaticFiles(directory=str(PROJECT_ROOT / "data"), follow_symlink=True), name="data")
 app.mount("/clip_preview", StaticFiles(directory=str(PROJECT_ROOT / "clip_preview")), name="clip_preview")
-app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+
+app.mount("/assets", StaticFiles(directory=str(VUE_DIST_DIR / "assets")), name="vue-assets")
+
+@app.get("/{full_path:path}")
+async def serve_vue_spa(full_path: str):
+    """Serve Vue SPA index.html for all non-API, non-static routes."""
+    file = VUE_DIST_DIR / full_path
+    if file.is_file():
+        return FileResponse(str(file))
+    return FileResponse(str(VUE_DIST_DIR / "index.html"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -241,8 +244,8 @@ if __name__ == "__main__":
     print(f"Starting server on http://0.0.0.0:{args.port}")
     print(f"  Config:     {args.config or '(not set)'}")
     print(f"  Checkpoint: {args.checkpoint or '(not set)'}")
-    print(f"  Clips page: http://127.0.0.1:{args.port}/clips.html")
-    print(f"  Results:    http://127.0.0.1:{args.port}/results.html")
+    print(f"  Clips page: http://127.0.0.1:{args.port}/clips")
+    print(f"  Results:    http://127.0.0.1:{args.port}/results")
     uvicorn.run(
         app,           # pass app object directly so this module is not re-imported
         host=args.host,

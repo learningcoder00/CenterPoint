@@ -16,3 +16,4 @@ venv/
 .vscode/
 debug/
 work_dirs/
+node_modules/
