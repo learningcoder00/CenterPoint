@@ -23,6 +23,7 @@ Usage (pre-computed prediction pkl, skip inference):
 """
 
 import argparse
+import datetime
 import os
 import pickle
 from copy import deepcopy
@@ -266,8 +267,8 @@ def compose_visualization(bev_img, front_imgs, back_imgs):
     return canvas
 
 
-def add_legend(img, score_threshold):
-    """Add class legend at the bottom of the image."""
+def add_legend(img, score_threshold, timestamp=None, frame_idx=None, total_frames=None):
+    """Add class legend and timestamp bar at the bottom of the image."""
     legend_h = 40
     canvas = np.zeros((img.shape[0] + legend_h, img.shape[1], 3), dtype=np.uint8)
     canvas[:img.shape[0]] = img
@@ -281,21 +282,32 @@ def add_legend(img, score_threshold):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1, cv2.LINE_AA)
         x_offset += 25 + len(name) * 12 + 15
 
-    info_text = f"score >= {score_threshold:.2f}"
-    cv2.putText(canvas, info_text,
-                (canvas.shape[1] - 200, img.shape[0] + 28),
+    right_text_parts = []
+    if timestamp is not None:
+        dt = datetime.datetime.fromtimestamp(timestamp)
+        right_text_parts.append(dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
+    if frame_idx is not None and total_frames is not None:
+        right_text_parts.append(f"[{frame_idx}/{total_frames}]")
+    right_text_parts.append(f"score >= {score_threshold:.2f}")
+
+    right_text = "  |  ".join(right_text_parts)
+    text_size = cv2.getTextSize(right_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
+    cv2.putText(canvas, right_text,
+                (canvas.shape[1] - text_size[0] - 10, img.shape[0] + 28),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1, cv2.LINE_AA)
     return canvas
 
 
 def visualize_sample(token, detection, info, data_root, output_dir,
-                     score_threshold=0.3, bev_range=54.0):
+                     score_threshold=0.3, bev_range=54.0,
+                     frame_idx=None, total_frames=None):
     """Visualize a single sample."""
     detections = parse_detections(detection, score_threshold)
     if len(detections) == 0:
         print(f"  [SKIP] No detections above threshold for token {token[:8]}...")
         return
 
+    timestamp = info.get("timestamp")
     bev_img = draw_bev(detections, bev_range)
 
     cam_paths = info.get("all_cams_path", [])
@@ -333,12 +345,20 @@ def visualize_sample(token, detection, info, data_root, output_dir,
             back_imgs.append(img)
 
     result = compose_visualization(bev_img, front_imgs, back_imgs)
-    result = add_legend(result, score_threshold)
+    result = add_legend(result, score_threshold,
+                        timestamp=timestamp,
+                        frame_idx=frame_idx,
+                        total_frames=total_frames)
 
-    out_path = os.path.join(output_dir, f"{token}.jpg")
+    prefix = f"{frame_idx:04d}_" if frame_idx is not None else ""
+    out_path = os.path.join(output_dir, f"{prefix}{token}.jpg")
     cv2.imwrite(out_path, result, [cv2.IMWRITE_JPEG_QUALITY, 90])
     n_det = len(detections)
-    print(f"  Saved: {out_path}  ({n_det} detections)")
+    ts_str = ""
+    if timestamp is not None:
+        dt = datetime.datetime.fromtimestamp(timestamp)
+        ts_str = f"  ts={dt.strftime('%H:%M:%S.%f')[:-3]}"
+    print(f"  Saved: {out_path}  ({n_det} detections){ts_str}")
 
 
 def run_inference(cfg, checkpoint_path, max_samples=-1, tokens=None):
@@ -463,9 +483,15 @@ def main():
         if args.max_samples > 0:
             tokens = tokens[:args.max_samples]
 
-    print(f"\nVisualizing {len(tokens)} samples (score >= {args.score_threshold}) ...")
+    tokens = sorted(
+        tokens,
+        key=lambda t: token_to_info[t].get("timestamp", 0) if t in token_to_info else 0,
+    )
+
+    total_frames = len(tokens)
+    print(f"\nVisualizing {total_frames} samples (score >= {args.score_threshold}) ...")
     for i, token in enumerate(tokens):
-        print(f"[{i+1}/{len(tokens)}] Token: {token[:16]}...")
+        print(f"[{i+1}/{total_frames}] Token: {token[:16]}...")
 
         if token not in predictions:
             print(f"  [SKIP] Token not in predictions")
@@ -477,7 +503,8 @@ def main():
         visualize_sample(
             token, predictions[token], token_to_info[token],
             data_root, args.output_dir,
-            args.score_threshold, args.bev_range
+            args.score_threshold, args.bev_range,
+            frame_idx=i + 1, total_frames=total_frames,
         )
 
     print(f"\nDone! Results saved to {args.output_dir}/")
