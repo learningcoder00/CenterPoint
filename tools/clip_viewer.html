@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>nuScenes Clip Preview</title>
+  <style>
+    :root {
+      --bg: #0f1220;
+      --panel: #171b2e;
+      --panel-alt: #1d233b;
+      --border: #2d3658;
+      --text: #eef2ff;
+      --muted: #a8b1d1;
+      --accent: #7dd3fc;
+      --accent-2: #c084fc;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(125, 211, 252, 0.12), transparent 28%),
+        radial-gradient(circle at top right, rgba(192, 132, 252, 0.14), transparent 24%),
+        linear-gradient(180deg, #0b0e18, var(--bg));
+      color: var(--text);
+      font-family: "Segoe UI", Arial, sans-serif;
+    }
+
+    .page {
+      width: min(1500px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 24px 0 48px;
+    }
+
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 24px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(29, 35, 59, 0.95), rgba(18, 22, 37, 0.95));
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: 30px;
+      letter-spacing: 0.02em;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+      max-width: 760px;
+    }
+
+    .controls {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .search-box {
+      flex: 1;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(23, 27, 46, 0.92);
+      box-shadow: var(--shadow);
+    }
+
+    .search-box input {
+      width: 100%;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      font-size: 15px;
+    }
+
+    .stats {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .stat {
+      min-width: 120px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(23, 27, 46, 0.92);
+      box-shadow: var(--shadow);
+    }
+
+    .stat .label {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .stat .value {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 18px;
+    }
+
+    .card {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(23, 27, 46, 0.97), rgba(17, 20, 33, 0.97));
+      box-shadow: var(--shadow);
+      transition: transform 0.2s ease, border-color 0.2s ease;
+      cursor: pointer;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(125, 211, 252, 0.55);
+    }
+
+    .card:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .preview {
+      aspect-ratio: 16 / 9;
+      width: 100%;
+      object-fit: cover;
+      display: block;
+      background: #0a0d16;
+    }
+
+    .card-body {
+      padding: 14px;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .card-title {
+      margin: 0;
+      font-size: 17px;
+    }
+
+    .badge {
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: rgba(125, 211, 252, 0.16);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .meta-item {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--panel-alt);
+    }
+
+    .meta-item .label {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .meta-item .value {
+      font-size: 15px;
+      font-weight: 600;
+      word-break: break-all;
+    }
+
+    .card-footer {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
+
+    .card-tags-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-height: 26px;
+    }
+
+    .tag-chip {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(125, 211, 252, 0.12);
+      color: var(--accent);
+      border: 1px solid rgba(125, 211, 252, 0.35);
+    }
+
+    .tag-list.tag-list-empty::after {
+      content: "—";
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .api-row {
+      margin-bottom: 16px;
+    }
+
+    .api-row .search-box {
+      max-width: 720px;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 8, 18, 0.75);
+      backdrop-filter: blur(6px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-panel {
+      width: min(1100px, 100%);
+      max-height: calc(100vh - 48px);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 0;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .modal-preview-col {
+      display: flex;
+      flex-direction: column;
+      background: #0a0d16;
+      min-height: 0;
+    }
+
+    .modal-preview-img {
+      width: 100%;
+      flex: 1;
+      min-height: 280px;
+      object-fit: contain;
+      background: #000;
+    }
+
+    .modal-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: rgba(15, 18, 32, 0.95);
+    }
+
+    .modal-toolbar .title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .modal-toolbar .meta-line {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .modal-btn {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(125, 211, 252, 0.12);
+      color: var(--accent);
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .modal-btn.secondary {
+      background: transparent;
+      color: var(--text);
+    }
+
+    .modal-side {
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      gap: 14px;
+      overflow-y: auto;
+      border-left: 1px solid var(--border);
+    }
+
+    .modal-side h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .modal-side .hint {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .modal-tags-input {
+      width: 100%;
+      min-height: 140px;
+      resize: vertical;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--panel-alt);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .modal-status {
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 18px;
+    }
+
+    .modal-status.error {
+      color: #fca5a5;
+    }
+
+    .modal-status.ok {
+      color: #86efac;
+    }
+
+    @media (max-width: 900px) {
+      .modal-panel {
+        grid-template-columns: 1fr;
+        max-height: none;
+        overflow-y: auto;
+      }
+
+      .modal-side {
+        border-left: none;
+        border-top: 1px solid var(--border);
+      }
+    }
+
+    .empty,
+    .loading {
+      padding: 32px;
+      border: 1px dashed var(--border);
+      border-radius: 18px;
+      text-align: center;
+      color: var(--muted);
+      background: rgba(23, 27, 46, 0.72);
+    }
+
+    @media (max-width: 900px) {
+      .hero,
+      .controls {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <div>
+        <h1>nuScenes Clip Preview</h1>
+        <p>
+          点击卡片打开弹窗：左侧为前视相机 2 FPS 播放，右侧可编辑并保存该 clip 的 tags。
+          后端接口可通过下方「API 基地址」或 URL 参数 <code>?api=http://host:port</code> 配置。
+          筛选框可按 clip id 或 token 过滤。
+        </p>
+      </div>
+    </section>
+
+    <section class="api-row">
+      <div class="search-box">
+        <span>API</span>
+        <input id="apiBaseInput" type="text" placeholder="例如 http://127.0.0.1:5000 （留空则仅本次会话本地保存 tags）">
+      </div>
+    </section>
+
+    <section class="controls">
+      <div class="search-box">
+        <span>Filter</span>
+        <input id="searchInput" type="text" placeholder="Search by clip id or token">
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <span class="label">Clips</span>
+          <span class="value" id="clipCount">-</span>
+        </div>
+        <div class="stat">
+          <span class="label">Frames</span>
+          <span class="value" id="frameCount">-</span>
+        </div>
+        <div class="stat">
+          <span class="label">FPS</span>
+          <span class="value" id="fpsValue">2</span>
+        </div>
+      </div>
+    </section>
+
+    <div id="content" class="loading">Loading clips_meta.json ...</div>
+  </div>
+
+  <div id="clipModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalClipTitle">
+    <div class="modal-panel">
+      <div class="modal-preview-col">
+        <img id="modalPreviewImg" class="modal-preview-img" alt="Front camera preview">
+        <div class="modal-toolbar">
+          <div>
+            <p id="modalClipTitle" class="title">clip_000</p>
+            <div id="modalClipMeta" class="meta-line"></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" id="modalPlayPause" class="modal-btn">暂停</button>
+            <button type="button" id="modalCloseBtn" class="modal-btn secondary">关闭</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-side">
+        <h3>Tags</h3>
+        <p class="hint">
+          每行一个 tag，保存时会写入后端：<br>
+          <code>GET {API}/api/clips/{clip_id}/tags</code> ·
+          <code>PUT {API}/api/clips/{clip_id}/tags</code>，请求体 <code>{"tags":["a","b"]}</code>
+        </p>
+        <textarea id="modalTagsInput" class="modal-tags-input" placeholder="每行一个 tag"></textarea>
+        <div class="modal-actions">
+          <button type="button" id="modalSaveTags" class="modal-btn">保存 tags</button>
+        </div>
+        <div id="modalStatus" class="modal-status"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const content = document.getElementById("content");
+    const searchInput = document.getElementById("searchInput");
+    const clipCount = document.getElementById("clipCount");
+    const frameCount = document.getElementById("frameCount");
+    const fpsValue = document.getElementById("fpsValue");
+    const apiBaseInput = document.getElementById("apiBaseInput");
+
+    const clipModal = document.getElementById("clipModal");
+    const modalPreviewImg = document.getElementById("modalPreviewImg");
+    const modalClipTitle = document.getElementById("modalClipTitle");
+    const modalClipMeta = document.getElementById("modalClipMeta");
+    const modalPlayPause = document.getElementById("modalPlayPause");
+    const modalCloseBtn = document.getElementById("modalCloseBtn");
+    const modalTagsInput = document.getElementById("modalTagsInput");
+    const modalSaveTags = document.getElementById("modalSaveTags");
+    const modalStatus = document.getElementById("modalStatus");
+
+    const LS_API = "clipPreviewApiBase";
+    const PLAY_INTERVAL_MS = 500;
+
+    let allClips = [];
+    let previewFps = 2;
+    const localTagsByClipId = new Map();
+
+    let modalClip = null;
+    let modalIndex = 0;
+    let modalTimer = null;
+    let modalPlaying = true;
+
+    function getApiBase() {
+      const fromInput = (apiBaseInput.value || "").trim().replace(/\/$/, "");
+      return fromInput;
+    }
+
+    function parseTagsTextarea(text) {
+      return text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }
+
+    function tagsToTextarea(tags) {
+      return (tags || []).join("\n");
+    }
+
+    function renderTagChips(container, tags) {
+      container.innerHTML = "";
+      container.classList.toggle("tag-list-empty", !tags || tags.length === 0);
+      (tags || []).forEach((tag) => {
+        const span = document.createElement("span");
+        span.className = "tag-chip";
+        span.textContent = tag;
+        container.appendChild(span);
+      });
+    }
+
+    async function apiFetchTags(clipId) {
+      const base = getApiBase();
+      if (!base) {
+        return localTagsByClipId.get(clipId) || [];
+      }
+      const url = `${base}/api/clips/${encodeURIComponent(clipId)}/tags`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) {
+        throw new Error(`GET tags ${res.status}`);
+      }
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        return data;
+      }
+      if (data && Array.isArray(data.tags)) {
+        return data.tags;
+      }
+      return [];
+    }
+
+    async function apiSaveTags(clipId, tags) {
+      const base = getApiBase();
+      if (!base) {
+        localTagsByClipId.set(clipId, tags);
+        return;
+      }
+      const url = `${base}/api/clips/${encodeURIComponent(clipId)}/tags`;
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ tags }),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(`PUT tags ${res.status}${t ? `: ${t.slice(0, 120)}` : ""}`);
+      }
+    }
+
+    async function refreshCardTags(clipId, container) {
+      container.title = "";
+      try {
+        const tags = await apiFetchTags(clipId);
+        renderTagChips(container, tags);
+      } catch (e) {
+        const fallback = localTagsByClipId.get(clipId) || [];
+        renderTagChips(container, fallback);
+        if (getApiBase()) {
+          container.title = `加载 tags 失败: ${e.message}`;
+        }
+      }
+    }
+
+    function formatSeconds(value) {
+      return `${value.toFixed(1)}s`;
+    }
+
+    function setStats(clips, fps) {
+      clipCount.textContent = clips.length;
+      frameCount.textContent = clips.reduce((sum, clip) => sum + clip.frame_count, 0);
+      fpsValue.textContent = fps;
+    }
+
+    function stopModalPlayback() {
+      if (modalTimer) {
+        window.clearInterval(modalTimer);
+        modalTimer = null;
+      }
+    }
+
+    function modalStepFrame() {
+      if (!modalClip || modalClip.frames.length <= 1) {
+        return;
+      }
+      modalIndex = (modalIndex + 1) % modalClip.frames.length;
+      modalPreviewImg.src = modalClip.frames[modalIndex].image_path;
+    }
+
+    function setModalPlaying(playing) {
+      modalPlaying = playing;
+      modalPlayPause.textContent = playing ? "暂停" : "播放";
+      stopModalPlayback();
+      if (playing && modalClip && modalClip.frames.length > 1) {
+        modalTimer = window.setInterval(modalStepFrame, PLAY_INTERVAL_MS);
+      }
+    }
+
+    function openModal(clip) {
+      modalClip = clip;
+      modalIndex = 0;
+      modalStatus.textContent = "";
+      modalStatus.className = "modal-status";
+
+      modalClipTitle.textContent = clip.clip_id;
+      modalClipMeta.textContent = `${clip.frame_count} frames · ${formatSeconds(clip.duration_s)} · 2 FPS`;
+      modalPreviewImg.src = clip.frames[0].image_path;
+
+      clipModal.classList.add("open");
+      document.body.style.overflow = "hidden";
+
+      modalTagsInput.value = "";
+      (async () => {
+        try {
+          let tags = [];
+          if (getApiBase()) {
+            tags = await apiFetchTags(clip.clip_id);
+          } else {
+            tags = localTagsByClipId.get(clip.clip_id) || [];
+          }
+          modalTagsInput.value = tagsToTextarea(tags);
+        } catch (e) {
+          modalTagsInput.value = tagsToTextarea(localTagsByClipId.get(clip.clip_id) || []);
+          modalStatus.textContent = `加载 tags 失败（可本地编辑后保存）: ${e.message}`;
+          modalStatus.className = "modal-status error";
+        }
+      })();
+
+      setModalPlaying(true);
+    }
+
+    function closeModal() {
+      stopModalPlayback();
+      modalClip = null;
+      clipModal.classList.remove("open");
+      document.body.style.overflow = "";
+    }
+
+    function createCard(clip) {
+      const card = document.createElement("article");
+      card.className = "card";
+      card.tabIndex = 0;
+      card.setAttribute("role", "button");
+      card.setAttribute("aria-label", `打开 ${clip.clip_id}`);
+
+      const img = document.createElement("img");
+      img.className = "preview";
+      img.loading = "lazy";
+      img.alt = `${clip.clip_id} preview`;
+      img.src = clip.thumbnail_path;
+
+      const body = document.createElement("div");
+      body.className = "card-body";
+
+      const header = document.createElement("div");
+      header.className = "card-header";
+      header.innerHTML = `
+        <h2 class="card-title">${clip.clip_id}</h2>
+        <span class="badge">${clip.frame_count} frames</span>
+      `;
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.innerHTML = `
+        <div class="meta-item">
+          <span class="label">Duration</span>
+          <span class="value">${formatSeconds(clip.duration_s)}</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Start Token</span>
+          <span class="value">${clip.start_token.slice(0, 12)}</span>
+        </div>
+      `;
+
+      const footer = document.createElement("div");
+      footer.className = "card-footer";
+      const tagLabel = document.createElement("span");
+      tagLabel.className = "card-tags-label";
+      tagLabel.textContent = "Tags";
+      const tagList = document.createElement("div");
+      tagList.className = "tag-list tag-list-empty";
+      footer.appendChild(tagLabel);
+      footer.appendChild(tagList);
+
+      body.appendChild(header);
+      body.appendChild(meta);
+      body.appendChild(footer);
+      card.appendChild(img);
+      card.appendChild(body);
+
+      refreshCardTags(clip.clip_id, tagList);
+
+      const open = (e) => {
+        if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") {
+          return;
+        }
+        if (e.type === "keydown" && e.key === " ") {
+          e.preventDefault();
+        }
+        openModal(clip);
+      };
+      card.addEventListener("click", open);
+      card.addEventListener("keydown", open);
+
+      card._tagListEl = tagList;
+      card._clipId = clip.clip_id;
+      return card;
+    }
+
+    function render(clips) {
+      if (!clips.length) {
+        content.className = "empty";
+        content.textContent = "No clips match the current filter.";
+        return;
+      }
+
+      content.className = "grid";
+      content.innerHTML = "";
+
+      const cards = clips.map(createCard);
+      cards.forEach((card) => content.appendChild(card));
+    }
+
+    function filterClips(query) {
+      const needle = query.trim().toLowerCase();
+      if (!needle) {
+        return allClips;
+      }
+
+      return allClips.filter((clip) => {
+        if (clip.clip_id.toLowerCase().includes(needle)) {
+          return true;
+        }
+        return clip.frames.some((frame) => frame.token.toLowerCase().includes(needle));
+      });
+    }
+
+    async function load() {
+      try {
+        const qs = new URLSearchParams(window.location.search);
+        const apiFromQs = (qs.get("api") || "").trim();
+        const apiFromLs = window.localStorage.getItem(LS_API) || "";
+        apiBaseInput.value = apiFromQs || apiFromLs;
+
+        const response = await fetch("./clips_meta.json");
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        allClips = data.clips || [];
+        previewFps = data.fps || 2;
+        setStats(allClips, previewFps);
+        render(allClips);
+      } catch (error) {
+        content.className = "empty";
+        content.textContent = `Failed to load clips_meta.json: ${error.message}`;
+      }
+    }
+
+    function saveApiBaseToStorage() {
+      window.localStorage.setItem(LS_API, (apiBaseInput.value || "").trim());
+    }
+
+    apiBaseInput.addEventListener("change", saveApiBaseToStorage);
+    apiBaseInput.addEventListener("input", saveApiBaseToStorage);
+
+    searchInput.addEventListener("input", () => {
+      render(filterClips(searchInput.value));
+    });
+
+    modalCloseBtn.addEventListener("click", closeModal);
+    clipModal.addEventListener("click", (e) => {
+      if (e.target === clipModal) {
+        closeModal();
+      }
+    });
+
+    modalPlayPause.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setModalPlaying(!modalPlaying);
+    });
+
+    modalSaveTags.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!modalClip) {
+        return;
+      }
+      const tags = parseTagsTextarea(modalTagsInput.value);
+      modalStatus.textContent = "保存中...";
+      modalStatus.className = "modal-status";
+      try {
+        await apiSaveTags(modalClip.clip_id, tags);
+        modalStatus.textContent = getApiBase()
+          ? "已保存到后端。"
+          : "已保存到本地（本页刷新前有效，未配置 API）。";
+        modalStatus.className = "modal-status ok";
+        const cards = content.querySelectorAll(".card");
+        cards.forEach((c) => {
+          if (c._clipId === modalClip.clip_id && c._tagListEl) {
+            refreshCardTags(modalClip.clip_id, c._tagListEl);
+          }
+        });
+      } catch (err) {
+        modalStatus.textContent = `保存失败: ${err.message}`;
+        modalStatus.className = "modal-status error";
+      }
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && clipModal.classList.contains("open")) {
+        closeModal();
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>

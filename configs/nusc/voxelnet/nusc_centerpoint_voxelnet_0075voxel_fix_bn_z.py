@@ -87,42 +87,8 @@ dataset_type = "NuScenesDataset"
 nsweeps = 10
 data_root = "data/nuScenes"
 
-db_sampler = dict(
-    type="GT-AUG",
-    enable=False,
-    db_info_path="data/nuScenes/dbinfos_train_10sweeps_withvelo.pkl",
-    sample_groups=[
-        dict(car=2),
-        dict(truck=3),
-        dict(construction_vehicle=7),
-        dict(bus=4),
-        dict(trailer=6),
-        dict(barrier=2),
-        dict(motorcycle=6),
-        dict(bicycle=6),
-        dict(pedestrian=2),
-        dict(traffic_cone=2),
-    ],
-    db_prep_steps=[
-        dict(
-            filter_by_min_num_points=dict(
-                car=5,
-                truck=5,
-                bus=5,
-                trailer=5,
-                construction_vehicle=5,
-                traffic_cone=5,
-                barrier=5,
-                motorcycle=5,
-                bicycle=5,
-                pedestrian=5,
-            )
-        ),
-        dict(filter_by_difficulty=[-1],),
-    ],
-    global_random_rotation_range_per_object=[0, 0],
-    rate=1.0,
-)
+db_sampler = None
+
 train_preprocessor = dict(
     mode="train",
     shuffle_points=True,
