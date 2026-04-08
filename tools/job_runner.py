@@ -52,6 +52,8 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS jobs (
                 job_id     TEXT PRIMARY KEY,
                 clip_id    TEXT NOT NULL,
+                config     TEXT NOT NULL DEFAULT '',
+                checkpoint TEXT NOT NULL DEFAULT '',
                 status     TEXT NOT NULL DEFAULT 'pending',
                 progress   INTEGER NOT NULL DEFAULT 0,
                 total      INTEGER NOT NULL DEFAULT 0,
@@ -61,12 +63,17 @@ async def init_db():
                 updated_at REAL NOT NULL
             )
         """)
+        for col, default in [("config", "''"), ("checkpoint", "''")]:
+            try:
+                await db.execute(f"ALTER TABLE jobs ADD COLUMN {col} TEXT NOT NULL DEFAULT {default}")
+            except Exception:
+                pass
         await db.execute("CREATE INDEX IF NOT EXISTS idx_jobs_clip ON jobs(clip_id)")
         await db.execute("CREATE TABLE IF NOT EXISTS tags (clip_id TEXT PRIMARY KEY, tags TEXT NOT NULL DEFAULT '[]')")
         await db.commit()
 
 
-async def create_job(clip_id: str) -> dict:
+async def create_job(clip_id: str, config: str = "", checkpoint: str = "") -> dict:
     import time
     clips = load_clips_meta()
     if clip_id not in clips:
@@ -75,8 +82,8 @@ async def create_job(clip_id: str) -> dict:
     now = time.time()
     async with aiosqlite.connect(str(DB_PATH)) as db:
         await db.execute(
-            "INSERT INTO jobs (job_id, clip_id, status, total, created_at, updated_at) VALUES (?,?,?,?,?,?)",
-            (job_id, clip_id, "pending", clips[clip_id]["frame_count"], now, now),
+            "INSERT INTO jobs (job_id, clip_id, config, checkpoint, status, total, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+            (job_id, clip_id, config, checkpoint, "pending", clips[clip_id]["frame_count"], now, now),
         )
         await db.commit()
     return {"job_id": job_id, "clip_id": clip_id, "status": "pending"}

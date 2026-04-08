@@ -221,16 +221,22 @@
     return map[s] || s;
   }
 
+  function fmtPath(p) {
+    if (!p) return "—";
+    const parts = p.replace(/\\/g, "/").split("/");
+    return parts.length > 2 ? "…/" + parts.slice(-2).join("/") : p;
+  }
+
   // ── video modal ───────────────────────────────────────────────────────────
   function openVideo(job) {
     videoModalTitle.textContent = `${job.clip_id}  ·  ${job.job_id.slice(0,8)}`;
     modalVideo.src = `${API}/api/jobs/${job.job_id}/video`;
     modalVideo.load();
     videoModalInfo.innerHTML = `
-      <span>Job ID: ${job.job_id}</span>
+      <span>Clip: ${job.clip_id}</span>
       <span>Frames: ${job.total}</span>
-      <span>Created: ${fmtTime(job.created_at)}</span>
-      <span>Updated: ${fmtTime(job.updated_at)}</span>
+      <span>Config: ${fmtPath(job.config)}</span>
+      <span>Checkpoint: ${fmtPath(job.checkpoint)}</span>
     `;
     videoModal.classList.add("open");
     document.body.style.overflow = "hidden";
@@ -323,9 +329,9 @@
       </div>
       <div class="meta">
         <div class="meta-item"><span class="label">Status</span><span class="value">${fmtStatus(job.status)}${job.total > 0 ? ` (${pct}%)` : ""}</span></div>
-        <div class="meta-item"><span class="label">Job ID</span><span class="value">${job.job_id.slice(0,10)}…</span></div>
         <div class="meta-item"><span class="label">Created</span><span class="value">${fmtTime(job.created_at)}</span></div>
-        <div class="meta-item"><span class="label">Updated</span><span class="value">${fmtTime(job.updated_at)}</span></div>
+        <div class="meta-item" style="grid-column:1/-1"><span class="label">Config</span><span class="value">${fmtPath(job.config)}</span></div>
+        <div class="meta-item" style="grid-column:1/-1"><span class="label">Checkpoint</span><span class="value">${fmtPath(job.checkpoint)}</span></div>
       </div>`;
 
     const footer = document.createElement("div");

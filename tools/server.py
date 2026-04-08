@@ -139,7 +139,7 @@ async def submit_jobs(body: SubmitJobsRequest, background_tasks: BackgroundTasks
     created = []
     for clip_id in body.clip_ids:
         try:
-            job = await runner.create_job(clip_id)
+            job = await runner.create_job(clip_id, config=config, checkpoint=checkpoint)
         except ValueError as e:
             raise HTTPException(400, str(e))
         background_tasks.add_task(runner.run_job, job["job_id"], config, checkpoint)
