@@ -329,7 +329,7 @@ def parse_args():
     p.add_argument("--data-root", required=True,
                    help="Root directory of the nuScenes dataset (contains v1.0-*/)")
     p.add_argument("--version", default="v1.0-trainval",
-                   choices=["v1.0-trainval", "v1.0-test", "v1.0-mini"],
+                   choices=["v1.0-trainval", "v1.0-test", "v1.0-trainval"],
                    help="Dataset version (default: v1.0-trainval)")
     p.add_argument("--split", default=None,
                    choices=["train", "val", "test", "mini_train", "mini_val", None],
@@ -362,7 +362,7 @@ def main():
         split_name = "test"
     elif args.version == "v1.0-trainval":
         split_name = "val"
-    elif args.version == "v1.0-mini":
+    elif args.version == "v1.0-trainval":
         split_name = "mini_val"
 
     split_scenes = getattr(splits, split_name)

@@ -18,3 +18,14 @@ CREATE TABLE IF NOT EXISTS tags (
     clip_id TEXT PRIMARY KEY,
     tags    TEXT NOT NULL DEFAULT '[]'
 );
+
+CREATE TABLE IF NOT EXISTS ai_optimizations (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id     TEXT NOT NULL,
+    description TEXT NOT NULL,
+    response    TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_optimizations_job ON ai_optimizations(job_id);

@@ -24,7 +24,7 @@ public class SpaController {
         this.props = props;
     }
 
-    @GetMapping(value = {"/", "/clips", "/results"})
+    @GetMapping(value = {"/", "/clips", "/results", "/ai-optimization"})
     @ResponseBody
     public ResponseEntity<Resource> spa(HttpServletRequest request) {
         Path indexHtml = props.projectRootPath()

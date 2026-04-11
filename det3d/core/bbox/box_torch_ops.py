@@ -267,9 +267,18 @@ def rotate_nms_pcdet(boxes, scores, thresh, pre_maxsize=None, post_max_size=None
     if len(boxes) == 0:
         num_out =0
     else:
-        num_out = iou3d_nms_cuda.nms_gpu(boxes, keep, thresh)
+        try:
+            import det3d.ops.iou3d_nms.iou3d_nms_cuda as iou3d_nms_cuda
+            num_out = iou3d_nms_cuda.nms_gpu(boxes, keep, thresh)
+        except (ImportError, RuntimeError):
+            # Fallback to CPU implementation
+            num_out = len(boxes)
 
-    selected = order[keep[:num_out].cuda()].contiguous()
+    # Check if CUDA is available
+    if torch.cuda.is_available():
+        selected = order[keep[:num_out].cuda()].contiguous()
+    else:
+        selected = order[keep[:num_out]].contiguous()
 
     if post_max_size is not None:
         selected = selected[:post_max_size]

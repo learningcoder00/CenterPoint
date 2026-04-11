@@ -547,7 +547,7 @@ def quaternion_yaw(q: Quaternion) -> float:
 
 def create_nuscenes_infos(root_path, version="v1.0-trainval", nsweeps=10, filter_zero=True):
     nusc = NuScenes(version=version, dataroot=root_path, verbose=True)
-    available_vers = ["v1.0-trainval", "v1.0-test", "v1.0-mini"]
+    available_vers = ["v1.0-trainval", "v1.0-test", "v1.0-trainval"]
     assert version in available_vers
     if version == "v1.0-trainval":
         train_scenes = splits.train
@@ -557,7 +557,7 @@ def create_nuscenes_infos(root_path, version="v1.0-trainval", nsweeps=10, filter
     elif version == "v1.0-test":
         train_scenes = splits.test
         val_scenes = []
-    elif version == "v1.0-mini":
+    elif version == "v1.0-trainval":
         train_scenes = splits.mini_train
         val_scenes = splits.mini_val
     else:

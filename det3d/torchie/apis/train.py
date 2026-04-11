@@ -92,9 +92,14 @@ def parse_second_losses(losses):
 def batch_processor(model, data, train_mode, **kwargs):
 
     if "local_rank" in kwargs:
-        device = torch.device(kwargs["local_rank"])
+        try:
+            device = torch.device(kwargs["local_rank"])
+        except RuntimeError:
+            # Fallback to CPU if CUDA is not available
+            device = torch.device("cpu")
     else:
-        device = None
+        # Use CPU by default
+        device = torch.device("cpu")
 
     # data = example_convert_to_torch(data, device=device)
     example = example_to_device(data, device, non_blocking=False)
