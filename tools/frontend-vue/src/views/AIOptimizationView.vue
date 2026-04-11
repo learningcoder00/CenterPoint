@@ -59,7 +59,12 @@
       </div>
       <div class="optimization-response">
         <strong>优化建议:</strong>
-        <pre>{{ opt.response }}</pre>
+        <div class="response-content" :class="{ 'expanded': expandedOptimizations[opt.id] }">
+          <pre>{{ opt.response }}</pre>
+        </div>
+        <button class="toggle-btn" @click="toggleExpand(opt.id)">
+          {{ expandedOptimizations[opt.id] ? '收起' : '展开' }}
+        </button>
       </div>
     </div>
   </div>
@@ -78,7 +83,8 @@ export default {
       response: null,
       allOptimizations: [],
       loadingOptimizations: false,
-      search: ''
+      search: '',
+      expandedOptimizations: {}
     }
   },
   computed: {
@@ -180,6 +186,9 @@ export default {
         console.error('删除失败:', error);
         alert('删除失败，请稍后重试');
       }
+    },
+    toggleExpand(id) {
+      this.expandedOptimizations[id] = !this.expandedOptimizations[id];
     }
   }
 }
@@ -342,15 +351,43 @@ textarea {
   line-height: 1.4;
 }
 
-.optimization-response pre {
+.response-content {
   margin-top: 8px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
+  overflow: hidden;
+  max-height: 150px;
+  transition: max-height 0.3s ease;
+}
+
+.response-content.expanded {
+  max-height: none;
+}
+
+.response-content pre {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  margin: 0;
   white-space: pre-wrap;
   word-wrap: break-word;
   font-family: inherit;
+}
+
+.toggle-btn {
+  margin-top: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent);
 }
 
 /* 加载和空状态样式 */
