@@ -115,13 +115,37 @@ onUnmounted(stopTimer)
 
 <style scoped>
 .preview-panel { width:min(1100px,100%); max-height:calc(100vh - 48px); overflow:hidden; display:grid; grid-template-columns:1.2fr 1fr; border-radius:20px; border:1px solid var(--border); background:var(--panel); box-shadow:var(--shadow); }
-.preview-col { display:flex; flex-direction:column; background:#0a0d16; min-height:0; }
-.preview-img { width:100%; flex:1; min-height:280px; object-fit:contain; background:#000; }
-.preview-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border-top:1px solid var(--border); background:rgba(15,18,32,.95); }
-.toolbar-title { font-size:13px; font-weight:700; margin:0; }
-.toolbar-meta { font-size:12px; color:var(--muted); margin:0; }
-.modal-btn { border:1px solid var(--border); border-radius:9px; background:rgba(125,211,252,.12); color:var(--accent); padding:7px 13px; cursor:pointer; font-size:12px; font-weight:600; }
-.modal-btn.secondary { background:transparent; color:var(--text); }
+.preview-col { display:flex; flex-direction:column; background:var(--preview-stage-bg); min-height:0; }
+.preview-img { width:100%; flex:1; min-height:280px; object-fit:contain; background:var(--preview-stage-bg); }
+.preview-toolbar {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px 14px;
+  border-top:1px solid var(--preview-toolbar-border);
+  background:var(--preview-toolbar-bg);
+  color:var(--preview-toolbar-text);
+}
+.toolbar-title { font-size:13px; font-weight:700; margin:0; color:var(--preview-toolbar-text); }
+.toolbar-meta { font-size:12px; color:var(--preview-toolbar-muted); margin:0; }
+.modal-btn {
+  border:1px solid var(--preview-button-border);
+  border-radius:9px;
+  background:var(--preview-button-bg);
+  color:var(--preview-button-text);
+  padding:7px 13px;
+  cursor:pointer;
+  font-size:12px;
+  font-weight:600;
+  transition:
+    background .18s var(--ease-out),
+    color .18s var(--ease-out),
+    border-color .18s var(--ease-out),
+    transform .18s var(--ease-out);
+}
+.modal-btn:hover { transform: translateY(-1px); }
+.modal-btn.secondary { background:transparent; color:var(--preview-toolbar-text); }
 .side-col { display:flex; flex-direction:column; padding:18px; gap:12px; overflow-y:auto; border-left:1px solid var(--border); }
 .side-col h3 { margin:0; font-size:15px; }
 .hint { margin:0; font-size:11px; color:var(--muted); line-height:1.5; }

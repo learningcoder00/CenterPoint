@@ -107,6 +107,24 @@ onUnmounted(() => { if (hoverTimer) clearInterval(hoverTimer) })
 .card-tags-label { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
 .tag-list.empty { color:var(--muted); font-size:11px; margin-top:5px; }
 .tag-list { margin-top:5px; }
-.hover-indicator { position:absolute; bottom:8px; right:10px; z-index:9; display:flex; align-items:center; gap:5px; padding:3px 8px; border-radius:999px; background:rgba(10,13,22,.75); backdrop-filter:blur(4px); border:1px solid rgba(125,211,252,.25); font-size:11px; color:var(--accent); pointer-events:none; }
+.hover-indicator {
+  position:absolute;
+  bottom:8px;
+  right:10px;
+  z-index:9;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  padding:3px 8px;
+  border-radius:999px;
+  background:var(--hover-indicator-bg);
+  backdrop-filter:blur(8px);
+  border:1px solid var(--hover-indicator-border);
+  box-shadow: 0 10px 20px rgba(13, 23, 38, 0.10);
+  font-size:11px;
+  font-weight:600;
+  color:var(--hover-indicator-text);
+  pointer-events:none;
+}
 .hover-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); animation:blink .6s infinite; }
 </style>

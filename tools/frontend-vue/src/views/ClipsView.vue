@@ -137,14 +137,50 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.sel-bar { display:none; position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:500; gap:14px; align-items:center; padding:14px 24px; border:1px solid rgba(125,211,252,.4); border-radius:18px; background:rgba(15,18,32,.97); backdrop-filter:blur(8px); box-shadow:0 8px 40px rgba(0,0,0,.5); white-space:nowrap; }
+.sel-bar {
+  display:none;
+  position:fixed;
+  bottom:28px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:500;
+  gap:14px;
+  align-items:center;
+  padding:14px 24px;
+  border:1px solid var(--selection-bar-border);
+  border-radius:18px;
+  background:var(--selection-bar-bg);
+  backdrop-filter:blur(12px);
+  box-shadow:var(--selection-bar-shadow);
+  white-space:nowrap;
+  transition:
+    background .24s var(--ease-out),
+    border-color .24s var(--ease-out),
+    box-shadow .24s var(--ease-out);
+}
 .sel-bar.visible { display:flex; }
 .sel-bar .count { font-size:15px; font-weight:700; color:var(--accent); }
-.sel-bar .btn { padding:9px 18px; border-radius:10px; border:0; cursor:pointer; font-size:13px; font-weight:700; }
-.sel-bar .btn-vis { background:var(--accent); color:#0a0d16; }
-.sel-bar .btn-vis:hover { background:#bae6fd; }
-.sel-bar .btn-clear { background:rgba(255,255,255,.08); color:var(--muted); }
-.sel-bar .btn-clear:hover { background:rgba(255,255,255,.14); color:var(--text); }
+.sel-bar .btn {
+  padding:9px 18px;
+  border-radius:10px;
+  border:0;
+  cursor:pointer;
+  font-size:13px;
+  font-weight:700;
+  transition:
+    background .18s var(--ease-out),
+    color .18s var(--ease-out),
+    transform .18s var(--ease-out);
+}
+.sel-bar .btn:active { transform: scale(.98); }
+.sel-bar .btn-vis { background:var(--accent); color:var(--primary-btn-text); }
+.sel-bar .btn-vis:hover { background:var(--primary-btn-hover-bg); }
+.sel-bar .btn-clear {
+  background:var(--selection-bar-secondary-bg);
+  color:var(--selection-bar-secondary-text);
+  border:1px solid var(--selection-bar-secondary-border);
+}
+.sel-bar .btn-clear:hover { background:var(--selection-bar-secondary-hover); color:var(--text); }
 .fps-control { min-width:150px; }
 .fps-row { display:flex; align-items:center; gap:10px; }
 .fps-slider { flex:1; accent-color:var(--accent); cursor:pointer; height:4px; }
