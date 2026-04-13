@@ -2,6 +2,7 @@ package com.centerpoint.viz.controller;
 
 import com.centerpoint.viz.config.AppProperties;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
@@ -31,8 +32,12 @@ public class SpaController {
             .resolve(props.getVueDist())
             .resolve("index.html");
         Resource res = new FileSystemResource(indexHtml);
+        // 未执行 npm run build 时没有 dist/，回退到打包进 JAR 的 static/index.html
         if (!res.exists()) {
-            return ResponseEntity.status(404).build();
+            res = new ClassPathResource("static/index.html");
+            if (!res.exists()) {
+                return ResponseEntity.status(404).build();
+            }
         }
         return ResponseEntity.ok()
             .header("Content-Type", "text/html; charset=UTF-8")

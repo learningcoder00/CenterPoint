@@ -12,6 +12,8 @@ set -e
 # ── 路径定位 ──────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+# Java 后端 SQLite 写入 work_dirs/clip_jobs.db；目录在 .gitignore 中，需预先存在
+mkdir -p work_dirs
 
 # ── 默认参数（可在此修改） ─────────────────────────────────────────────────────
 CONFIG="configs/nusc/voxelnet/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py"
@@ -58,13 +60,13 @@ echo -e "  ${GREEN}✓ Python $(python --version 2>&1)${NC}"
 if ! command -v ffmpeg &>/dev/null; then
   echo -e "${RED}✗ ffmpeg 未找到，请先安装: apt-get install -y ffmpeg${NC}"; exit 1
 fi
-echo -e "  ${GREEN}✓ ffmpeg$(NC) $(ffmpeg -version 2>&1 | head -1)"
+echo -e "  ${GREEN}✓ ffmpeg${NC} $(ffmpeg -version 2>&1 | head -1)"
 
 if [ "$BACKEND" = "java" ]; then
   if ! command -v java &>/dev/null; then
     echo -e "${RED}✗ java 未找到，请先安装: apt-get install -y openjdk-17-jdk${NC}"; exit 1
   fi
-  echo -e "  ${GREEN}✓ Java$(NC) $(java -version 2>&1 | head -1)"
+  echo -e "  ${GREEN}✓ Java${NC} $(java -version 2>&1 | head -1)"
   JAR="$SCRIPT_DIR/backend/target/centerpoint-viz-1.0.0.jar"
   if [ ! -f "$JAR" ]; then
     echo -e "${YELLOW}  JAR 不存在，正在构建...${NC}"

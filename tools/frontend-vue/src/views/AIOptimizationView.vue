@@ -71,6 +71,8 @@
 </template>
 
 <script>
+import { deleteAIOptimization, fetchAIOptimizations, submitAIOptimization } from '../api.js'
+
 export default {
   name: 'AIOptimizationView',
   data() {
@@ -117,19 +119,7 @@ export default {
       this.response = null;
       
       try {
-        const response = await fetch('/api/ai/optimization', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8'
-          },
-          body: JSON.stringify(this.form)
-        });
-        
-        if (!response.ok) {
-          throw new Error('请求失败');
-        }
-        
-        const data = await response.json();
+        const data = await submitAIOptimization(this.form.jobId, this.form.description)
         this.response = data.response;
         
         // 重新加载优化建议列表
@@ -145,13 +135,7 @@ export default {
       this.loadingOptimizations = true;
       
       try {
-        const response = await fetch('/api/ai/optimizations');
-        
-        if (!response.ok) {
-          throw new Error('请求失败');
-        }
-        
-        const data = await response.json();
+        const data = await fetchAIOptimizations()
         this.allOptimizations = data.optimizations || [];
       } catch (error) {
         console.error('加载优化建议失败:', error);
@@ -169,15 +153,7 @@ export default {
       }
       
       try {
-        const response = await fetch(`/api/ai/optimizations/${id}`, {
-          method: 'DELETE'
-        });
-        
-        if (!response.ok) {
-          throw new Error('删除失败');
-        }
-        
-        const data = await response.json();
+        const data = await deleteAIOptimization(id)
         if (data.success) {
           // 重新加载优化建议列表
           this.loadOptimizations();

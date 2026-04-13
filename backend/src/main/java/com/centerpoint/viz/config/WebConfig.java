@@ -45,16 +45,22 @@ public class WebConfig implements WebMvcConfigurer {
             .setCacheControl(CacheControl.noCache())
             .resourceChain(false);
 
-        // /assets/** -> Vue dist/assets/
+        // /assets/** -> Vue dist/assets/，若无 dist 则使用 JAR 内 classpath:/static/assets/
         String vueDist = root.resolve(props.getVueDist()).toString();
         registry.addResourceHandler("/assets/**")
-            .addResourceLocations("file:" + vueDist + "/assets/")
+            .addResourceLocations(
+                "file:" + vueDist + "/assets/",
+                "classpath:/static/assets/"
+            )
             .setCacheControl(CacheControl.noCache())
             .resourceChain(false);
 
-        // Root files (index.html, favicon, etc.) from Vue dist
+        // Root files (index.html, favicon, etc.) from Vue dist, falling back to JAR static resources
         registry.addResourceHandler("/*.html", "/*.ico", "/*.js", "/*.css", "/*.json", "/*.png", "/*.svg")
-            .addResourceLocations("file:" + vueDist + "/")
+            .addResourceLocations(
+                "file:" + vueDist + "/",
+                "classpath:/static/"
+            )
             .setCacheControl(CacheControl.noCache())
             .resourceChain(false);
     }

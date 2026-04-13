@@ -31,11 +31,13 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { resolveImgSrc } from '../api.js'
 import { fmtStatus, fmtTime, fmtPath } from '../utils.js'
 
 const props = defineProps({ job: Object })
 const emit = defineEmits(['play-video', 'show-log', 'delete'])
+const router = useRouter()
 
 const isActive = computed(() => props.job.status === 'running' || props.job.status === 'stitching')
 const pct = computed(() => props.job.total > 0 ? Math.round((props.job.progress / props.job.total) * 100) : 0)
@@ -59,7 +61,7 @@ function cardClick() {
 }
 
 function goToAIOptimization() {
-  window.location.href = `/ai-optimization?jobId=${props.job.job_id}`
+  router.push(`/ai-optimization?jobId=${encodeURIComponent(props.job.job_id)}`)
 }
 </script>
 

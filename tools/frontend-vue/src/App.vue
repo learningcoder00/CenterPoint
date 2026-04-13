@@ -1,11 +1,64 @@
 <template>
-  <div class="page">
-    <nav class="nav">
-      <router-link to="/clips">Clips</router-link>
-      <router-link to="/results">Results</router-link>
-      <router-link to="/ai-optimization">AI 优化</router-link>
-    </nav>
-    <router-view />
+  <div class="page-shell">
+    <header class="topbar">
+      <nav class="nav" aria-label="Primary">
+        <router-link to="/clips">Clips</router-link>
+        <router-link to="/results">Results</router-link>
+        <router-link to="/ai-optimization">AI 优化</router-link>
+      </nav>
+
+      <button
+        type="button"
+        class="theme-toggle"
+        :aria-label="themeLabel"
+        :title="themeLabel"
+        @click="toggleTheme"
+      >
+        <span class="theme-toggle__halo"></span>
+        <span class="theme-toggle__icon" aria-hidden="true">
+          <svg
+            v-if="theme === 'dark'"
+            class="theme-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M18 14.5A6.5 6.5 0 0 1 9.5 6a7.5 7.5 0 1 0 8.5 8.5Z"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M17.7 5.2v2.6M16.4 6.5H19M6 3.6v1.8M5.1 4.5h1.8"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+            />
+          </svg>
+          <svg
+            v-else
+            class="theme-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.8" />
+            <path
+              d="M12 2.8v2.4M12 18.8v2.4M21.2 12h-2.4M5.2 12H2.8M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7M18.5 18.5l-1.7-1.7M7.2 7.2 5.5 5.5"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+            />
+          </svg>
+        </span>
+      </button>
+    </header>
+
+    <div class="page">
+      <router-view />
+    </div>
   </div>
 </template>
 
