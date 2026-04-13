@@ -2,8 +2,8 @@
   <section class="hero hero-ai">
     <div class="hero-copy">
       <div class="hero-eyebrow">CenterPoint Intelligence</div>
-      <h1>AI Optimization Studio</h1>
-      <p>针对指定 job 提交问题描述，沉淀可追溯的优化建议。你可以把一次调参尝试、失败原因和 AI 建议留在同一个工作流里。</p>
+      <h1>AI 优化建议</h1>
+      <p>提交作业 ID 和问题描述，获取 AI 生成的优化建议。</p>
     </div>
 
     <div class="stats stats-ai">
@@ -40,7 +40,7 @@
       <div class="compose-head">
         <div>
           <div class="section-kicker">Submit Request</div>
-          <h2>提交新的优化请求</h2>
+          <h2>提交优化请求</h2>
         </div>
         <span class="badge compose-badge">{{ form.jobId ? 'Job linked' : 'Awaiting job id' }}</span>
       </div>
@@ -55,7 +55,7 @@
           <label>当前状态</label>
           <div class="field-note__content">
             <span class="note-pill">{{ isSubmitting ? '提交中' : '可提交' }}</span>
-            <span class="note-text">建议结合 Results 页里的失败日志、参数或现象来描述问题。</span>
+            <span class="note-text">输入作业 ID 和问题描述后，即可生成对应的优化建议。</span>
           </div>
         </div>
       </div>
@@ -65,15 +65,15 @@
         <textarea
           id="description"
           v-model.trim="form.description"
-          placeholder="例如：车辆框有明显偏移、远距离漏检较多、同一路段结果抖动明显……"
+          placeholder="描述检测结果的不足或问题"
         ></textarea>
       </div>
 
       <div class="compose-actions">
         <button class="btn-primary" type="button" :disabled="isSubmitting" @click="submitRequest">
-          {{ isSubmitting ? '提交中...' : '生成优化建议' }}
+          {{ isSubmitting ? '提交中...' : '提交请求' }}
         </button>
-        <p class="compose-tip">提交后会自动刷新建议列表，并在右侧保留本次最新响应。</p>
+        <p class="compose-tip">提交后会自动刷新优化建议列表，并展示本次返回结果。</p>
       </div>
     </article>
 
@@ -81,7 +81,7 @@
       <div class="compose-head">
         <div>
           <div class="section-kicker">Latest Response</div>
-          <h2>最新 AI 建议</h2>
+          <h2>AI 优化建议</h2>
         </div>
         <span class="badge compose-badge">{{ response ? 'Ready' : 'Waiting' }}</span>
       </div>
@@ -90,7 +90,7 @@
         <pre>{{ response }}</pre>
       </div>
       <div v-else class="response-empty">
-        提交一个 job 后，AI 返回的建议会先展示在这里，方便你边看边调整页面、参数或结果。
+        提交一个请求后，AI 返回的优化建议会显示在这里。
       </div>
     </article>
   </section>
