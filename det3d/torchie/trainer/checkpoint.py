@@ -41,10 +41,16 @@ open_mmlab_model_urls = {
 import torch.nn as nn 
 from typing import Set
 
+spconv_available = False
 try:
     import spconv.pytorch as spconv
+    spconv_available = True
 except:
-    import spconv as spconv
+    try:
+        import spconv as spconv
+        spconv_available = True
+    except:
+        spconv_available = False
 
 def find_all_spconv_keys(model: nn.Module, prefix="") -> Set[str]:
     """
@@ -52,10 +58,13 @@ def find_all_spconv_keys(model: nn.Module, prefix="") -> Set[str]:
     from https://github.com/acivgin1/OpenPCDet/blob/8fc1a5d57bcb418d71d5118fb3df4b58d4ea0244/pcdet/utils/spconv_utils.py
     """
     found_keys: Set[str] = set()
+    if not spconv_available:
+        return found_keys
+    
     for name, child in model.named_children():
         new_prefix = f"{prefix}.{name}" if prefix != "" else name
 
-        if isinstance(child, spconv.conv.SparseConvolution):
+        if hasattr(spconv, 'conv') and isinstance(child, spconv.conv.SparseConvolution):
             new_prefix = f"{new_prefix}.weight"
             found_keys.add(new_prefix)
 
@@ -198,7 +207,7 @@ def load_checkpoint(model, filename, map_location='cpu', strict=False, logger=No
     else:
         if not osp.isfile(filename):
             raise IOError("{} is not a checkpoint file".format(filename))
-        checkpoint = torch.load(filename, map_location=map_location)
+        checkpoint = torch.load(filename, map_location=map_location, weights_only=False)
     # get state_dict from checkpoint
     if isinstance(checkpoint, OrderedDict):
         state_dict = checkpoint

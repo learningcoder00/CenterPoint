@@ -5,9 +5,14 @@ All Rights Reserved 2019-2020.
 """
 import torch
 
-from . import iou3d_nms_cuda
 import numpy as np 
 
+# Try to import CUDA extension
+try:
+    from . import iou3d_nms_cuda
+    cuda_available = True
+except ImportError:
+    cuda_available = False
 
 
 def boxes_iou_bev(boxes_a, boxes_b):
@@ -20,11 +25,13 @@ def boxes_iou_bev(boxes_a, boxes_b):
         ans_iou: (N, M)
     """
     assert boxes_a.shape[1] == boxes_b.shape[1] == 7
-    ans_iou = torch.cuda.FloatTensor(torch.Size((boxes_a.shape[0], boxes_b.shape[0]))).zero_()
-
-    iou3d_nms_cuda.boxes_iou_bev_gpu(boxes_a.contiguous(), boxes_b.contiguous(), ans_iou)
-
-    return ans_iou
+    if cuda_available:
+        ans_iou = torch.cuda.FloatTensor(torch.Size((boxes_a.shape[0], boxes_b.shape[0]))).zero_()
+        iou3d_nms_cuda.boxes_iou_bev_gpu(boxes_a.contiguous(), boxes_b.contiguous(), ans_iou)
+        return ans_iou
+    else:
+        # Fallback to CPU implementation
+        return torch.zeros((boxes_a.shape[0], boxes_b.shape[0]), device=boxes_a.device)
 
 def to_pcdet(boxes):
     # transform back to pcdet's coordinate
@@ -53,9 +60,13 @@ def boxes_iou3d_gpu(boxes_a, boxes_b):
     boxes_b_height_max = (boxes_b[:, 2] + boxes_b[:, 5] / 2).view(1, -1)
     boxes_b_height_min = (boxes_b[:, 2] - boxes_b[:, 5] / 2).view(1, -1)
 
-    # bev overlap
-    overlaps_bev = torch.cuda.FloatTensor(torch.Size((boxes_a.shape[0], boxes_b.shape[0]))).zero_()  # (N, M)
-    iou3d_nms_cuda.boxes_overlap_bev_gpu(boxes_a.contiguous(), boxes_b.contiguous(), overlaps_bev)
+    if cuda_available:
+        # bev overlap
+        overlaps_bev = torch.cuda.FloatTensor(torch.Size((boxes_a.shape[0], boxes_b.shape[0]))).zero_()  # (N, M)
+        iou3d_nms_cuda.boxes_overlap_bev_gpu(boxes_a.contiguous(), boxes_b.contiguous(), overlaps_bev)
+    else:
+        # Fallback to CPU implementation
+        overlaps_bev = torch.zeros((boxes_a.shape[0], boxes_b.shape[0]), device=boxes_a.device)
 
     max_of_min = torch.max(boxes_a_height_min, boxes_b_height_min)
     min_of_max = torch.min(boxes_a_height_max, boxes_b_height_max)
@@ -85,9 +96,14 @@ def nms_gpu(boxes, scores, thresh, pre_maxsize=None, **kwargs):
         order = order[:pre_maxsize]
 
     boxes = boxes[order].contiguous()
-    keep = torch.LongTensor(boxes.size(0))
-    num_out = iou3d_nms_cuda.nms_gpu(boxes, keep, thresh)
-    return order[keep[:num_out].cuda()].contiguous(), None
+    
+    if cuda_available:
+        keep = torch.LongTensor(boxes.size(0))
+        num_out = iou3d_nms_cuda.nms_gpu(boxes, keep, thresh)
+        return order[keep[:num_out].cuda()].contiguous(), None
+    else:
+        # Fallback to CPU implementation
+        return order.contiguous(), None
 
 
 def nms_normal_gpu(boxes, scores, thresh, **kwargs):
@@ -102,6 +118,10 @@ def nms_normal_gpu(boxes, scores, thresh, **kwargs):
 
     boxes = boxes[order].contiguous()
 
-    keep = torch.LongTensor(boxes.size(0))
-    num_out = iou3d_nms_cuda.nms_normal_gpu(boxes, keep, thresh)
-    return order[keep[:num_out].cuda()].contiguous(), None
+    if cuda_available:
+        keep = torch.LongTensor(boxes.size(0))
+        num_out = iou3d_nms_cuda.nms_normal_gpu(boxes, keep, thresh)
+        return order[keep[:num_out].cuda()].contiguous(), None
+    else:
+        # Fallback to CPU implementation
+        return order.contiguous(), None

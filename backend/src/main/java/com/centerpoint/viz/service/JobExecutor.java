@@ -135,50 +135,71 @@ public class JobExecutor {
             return;
         }
 
-        jobRepo.updateStitching(jobId, tail(logLines, 200));
+        // Check if ffmpeg is available
+        boolean ffmpegAvailable = false;
+        String ffmpegPath = "D:\\ffmpeg\\ffmpeg-8.1-full_build\\bin\\ffmpeg.exe";
+        try {
+            ProcessBuilder pb = new ProcessBuilder(ffmpegPath, "-version");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            p.waitFor();
+            ffmpegAvailable = (p.exitValue() == 0);
+        } catch (Exception e) {
+            log.info("ffmpeg not found, skipping video stitching");
+        }
 
-        // Write concat list
-        Path concatFile = jobDir.resolve("concat.txt");
-        try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(concatFile))) {
-            for (Path jpg : jpgFiles) {
-                w.println("file '" + jpg.toAbsolutePath() + "'");
-                w.println("duration 0.5");
+        if (ffmpegAvailable) {
+            jobRepo.updateStitching(jobId, tail(logLines, 200));
+
+            // Write concat list
+            Path concatFile = jobDir.resolve("concat.txt");
+            try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(concatFile))) {
+                for (Path jpg : jpgFiles) {
+                    w.println("file '" + jpg.toAbsolutePath() + "'");
+                    w.println("duration 0.5");
+                }
             }
-        }
 
-        Path mp4Path = jobDir.resolve(clipId + ".mp4");
-        List<String> ffCmd = List.of(
-            "ffmpeg", "-y",
-            "-f", "concat", "-safe", "0",
-            "-i", concatFile.toString(),
-            "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-            "-c:v", "libx264", "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            mp4Path.toString()
-        );
+            Path mp4Path = jobDir.resolve(clipId + ".mp4");
+            List<String> ffCmd = List.of(
+                ffmpegPath, "-y",
+                "-f", "concat", "-safe", "0",
+                "-i", concatFile.toString(),
+                "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                mp4Path.toString()
+            );
 
-        logLines.add(String.format("\n[ffmpeg] stitching %d frames -> %s\n", jpgFiles.size(), mp4Path.getFileName()));
+            logLines.add(String.format("\n[ffmpeg] stitching %d frames -> %s\n", jpgFiles.size(), mp4Path.getFileName()));
 
-        ProcessBuilder ffPb = new ProcessBuilder(ffCmd);
-        ffPb.directory(projectRoot.toFile());
-        ffPb.redirectErrorStream(true);
+            ProcessBuilder ffPb = new ProcessBuilder(ffCmd);
+            ffPb.directory(projectRoot.toFile());
+            ffPb.redirectErrorStream(true);
 
-        Process ffProc = ffPb.start();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(ffProc.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                logLines.add(line + "\n");
+            Process ffProc = ffPb.start();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(ffProc.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    logLines.add(line + "\n");
+                }
             }
-        }
 
-        int ffExit = ffProc.waitFor();
-        if (ffExit != 0) {
-            jobRepo.updateFailed(jobId, tail(logLines, 200));
-            return;
-        }
+            int ffExit = ffProc.waitFor();
+            if (ffExit != 0) {
+                jobRepo.updateFailed(jobId, tail(logLines, 200));
+                return;
+            }
 
-        jobRepo.updateCompleted(jobId, mp4Path.toString(), jpgFiles.size(), tail(logLines, 200));
-        log.info("Job {} completed: {} frames -> {}", jobId, jpgFiles.size(), mp4Path);
+            jobRepo.updateCompleted(jobId, mp4Path.toString(), jpgFiles.size(), tail(logLines, 200));
+            log.info("Job {} completed: {} frames -> {}", jobId, jpgFiles.size(), mp4Path);
+        } else {
+            // ffmpeg not available, complete job with just frames
+            logLines.add("\n[ffmpeg] not available, skipping video stitching\n");
+            logLines.add("Job completed with frames only (no video)\n");
+            jobRepo.updateCompleted(jobId, null, jpgFiles.size(), tail(logLines, 200));
+            log.info("Job {} completed: {} frames (no video, ffmpeg not available)", jobId, jpgFiles.size());
+        }
     }
 
     private static String tail(List<String> lines, int n) {

@@ -304,8 +304,8 @@ def visualize_sample(token, detection, info, data_root, output_dir,
     """Visualize a single sample."""
     detections = parse_detections(detection, score_threshold)
     if len(detections) == 0:
-        print(f"  [SKIP] No detections above threshold for token {token[:8]}...")
-        return
+        print(f"  [INFO] No detections above threshold for token {token[:8]}..., still generating visualization")
+        # Continue with empty detections
 
     timestamp = info.get("timestamp")
     bev_img = draw_bev(detections, bev_range)
@@ -366,7 +366,9 @@ def run_inference(cfg, checkpoint_path, max_samples=-1, tokens=None):
     model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
     print(f"Loading checkpoint from {checkpoint_path} ...")
     load_checkpoint(model, checkpoint_path, map_location="cpu")
-    model = model.cuda()
+    # Check if CUDA is available
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
     model.eval()
 
     dataset = build_dataset(cfg.data.val)

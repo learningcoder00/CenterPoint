@@ -21,7 +21,10 @@
     </div>
     <div class="card-footer">
       <span class="log-line" title="点击查看完整日志" @click.stop="$emit('show-log', job)">{{ lastLogLine }}</span>
-      <button class="delete-btn" @click.stop="$emit('delete', job.job_id)">删除</button>
+      <div class="action-buttons">
+        <button class="ai-btn" @click.stop="goToAIOptimization">AI优化</button>
+        <button class="delete-btn" @click.stop="$emit('delete', job.job_id)">删除</button>
+      </div>
     </div>
   </article>
 </template>
@@ -54,6 +57,10 @@ const lastLogLine = computed(() => {
 function cardClick() {
   if (props.job.status === 'completed') emit('play-video', props.job)
 }
+
+function goToAIOptimization() {
+  window.location.href = `/ai-optimization?jobId=${props.job.job_id}`
+}
 </script>
 
 <style scoped>
@@ -72,6 +79,9 @@ function cardClick() {
 .card-title { margin:0; font-size:16px; }
 .card-footer { padding:0 14px 12px; display:flex; justify-content:space-between; align-items:center; }
 .log-line { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:230px; cursor:pointer; }
+.action-buttons { display:flex; gap:8px; }
+.ai-btn { background:transparent; border:1px solid rgba(147,197,253,.3); color:var(--running); border-radius:8px; padding:4px 10px; font-size:11px; cursor:pointer; }
+.ai-btn:hover { background:rgba(147,197,253,.1); }
 .delete-btn { background:transparent; border:1px solid rgba(252,165,165,.3); color:var(--danger); border-radius:8px; padding:4px 10px; font-size:11px; cursor:pointer; }
 .delete-btn:hover { background:rgba(252,165,165,.1); }
 </style>

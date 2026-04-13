@@ -1,9 +1,9 @@
 import importlib
 spconv_spec = importlib.util.find_spec("spconv")
 found = spconv_spec is not None
-if found:
-    from .backbones import *  # noqa: F401,F403
-else:
+# Always import backbones, even without spconv
+from .backbones import *  # noqa: F401,F403
+if not found:
     print("No spconv, sparse convolution disabled!")
 from .bbox_heads import *  # noqa: F401,F403
 from .builder import (

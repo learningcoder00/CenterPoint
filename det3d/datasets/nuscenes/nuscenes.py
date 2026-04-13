@@ -192,7 +192,7 @@ class NuScenesDataset(PointCloudDataset):
     def evaluation(self, detections, output_dir=None, testset=False):
         version = self.version
         eval_set_map = {
-            "v1.0-mini": "mini_val",
+            "v1.0-trainval": "mini_val",
             "v1.0-trainval": "val",
             "v1.0-test": "test",
         }
