@@ -52,6 +52,22 @@ export async function deleteJob(jobId) {
   return request(`/api/jobs/${jobId}`, { method: 'DELETE' })
 }
 
+export async function submitAIOptimization(jobId, description) {
+  return request('/api/ai/optimization', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ jobId, description }),
+  })
+}
+
+export async function fetchAIOptimizations() {
+  return request('/api/ai/optimizations')
+}
+
+export async function deleteAIOptimization(id) {
+  return request(`/api/ai/optimizations/${id}`, { method: 'DELETE' })
+}
+
 export function videoUrl(jobId) {
   return `${BASE}/api/jobs/${jobId}/video`
 }

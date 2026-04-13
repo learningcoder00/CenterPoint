@@ -4,6 +4,7 @@
       <nav class="nav" aria-label="Primary">
         <router-link to="/clips">Clips</router-link>
         <router-link to="/results">Results</router-link>
+        <router-link to="/ai-optimization">AI Optimization</router-link>
       </nav>
 
       <button

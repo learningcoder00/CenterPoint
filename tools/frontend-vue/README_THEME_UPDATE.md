@@ -59,10 +59,40 @@
 - `src/router.js`
 - `README_THEME_UPDATE.md`
 
+## 0413
+
+### 新页面接入
+- 接入 `wang` 新增的 `AIOptimizationView.vue` 页面，并正式挂到当前前端导航中。
+- 顶部导航新增 `AI Optimization` 入口，和现有 `Clips`、`Results` 页面并列展示。
+- 保留后端新增的 AI 优化接口能力，同时把页面结构重写进当前前端体系。
+
+### 统一样式
+- 将 `AIOptimizationView.vue` 从旧版独立样式改造成和现有页面一致的视觉语言。
+- 新页面统一使用当前项目的 `hero`、`stats`、`controls`、`card`、`badge` 等样式体系。
+- 重新设计 AI 页面布局：
+  - 顶部为和 `Clips` / `Results` 一致的 Hero 区
+  - 中间为请求提交区与最新响应区双栏布局
+  - 底部为优化建议历史卡片列表
+- 统一表单、按钮、搜索框、删除按钮、展开按钮的视觉风格，保证和现有前端主题一致。
+
+### 交互与结构整理
+- 将 AI 相关请求从页面内联 `fetch` 抽离到 `src/api.js`，和原有接口封装方式保持一致。
+- 保留从 `Results` 页点击 `AI优化` 后通过 `jobId` 自动带入的交互。
+- 支持按 `job id` 或问题描述搜索历史优化建议。
+- 保留优化建议的删除、展开 / 收起、刷新列表等功能。
+
+### 当天涉及文件
+- `src/App.vue`
+- `src/api.js`
+- `src/views/AIOptimizationView.vue`
+- `README_THEME_UPDATE.md`
+
 ## 最终涉及文件汇总
 - `src/App.vue`
+- `src/api.js`
 - `src/assets/main.css`
 - `src/router.js`
+- `src/views/AIOptimizationView.vue`
 - `src/views/ClipsView.vue`
 - `src/views/ResultsView.vue`
 - `src/components/ClipCard.vue`
