@@ -260,14 +260,14 @@ CenterPoint/
 │       └── repository/               # SQLite via JdbcTemplate
 ├── configs/nusc/voxelnet/            # model configs
 ├── det3d/                            # CenterPoint model + dataset code
+├── frontend/                         # Vue 3 + Vite SPA
+│   └── dist/                         # pre-built frontend (served by backend)
 ├── tools/
 │   ├── create_data.py                # generate infos pkl (trainval / test)
 │   ├── create_nusc_test_infos.py     # generate infos pkl for test split
 │   ├── generate_clip_preview.py      # generate clips_meta.json for the web UI
 │   ├── visualize_results.py          # per-sample BEV + camera visualization
-│   ├── server.py                     # Python FastAPI backend (fallback)
-│   └── frontend-vue/                 # Vue 3 + Vite SPA
-│       └── dist/                     # pre-built frontend (served by backend)
+│   └── server.py                     # Python FastAPI backend (fallback)
 ├── clip_preview/
 │   └── clips_meta.json               # generated clip index
 ├── data/

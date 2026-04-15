@@ -3,7 +3,7 @@ setlocal
 
 set "ROOT=G:\RGSX\CenterPoint"
 set "NPM=G:\Program Files\nodejs\npm.cmd"
-set "FRONTEND=tools\frontend-vue"
+set "FRONTEND=frontend"
 set "HOST=127.0.0.1"
 set "PORT=5173"
 

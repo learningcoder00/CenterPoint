@@ -29,7 +29,7 @@ from pydantic import BaseModel
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CLIPS_META_PATH = PROJECT_ROOT / "clip_preview" / "clips_meta.json"
-VUE_DIST_DIR = PROJECT_ROOT / "tools" / "frontend-vue" / "dist"
+VUE_DIST_DIR = PROJECT_ROOT / "frontend" / "dist"
 DATA_DIR = PROJECT_ROOT
 
 # ── populated at startup from CLI args ──────────────────────────────────────

@@ -3,7 +3,7 @@ setlocal
 
 set "ROOT=G:\RGSX\CenterPoint"
 set "NPM=G:\Program Files\nodejs\npm.cmd"
-set "FRONTEND=tools\frontend-vue"
+set "FRONTEND=frontend"
 
 cd /d "%ROOT%\%FRONTEND%"
 if errorlevel 1 goto :cd_fail

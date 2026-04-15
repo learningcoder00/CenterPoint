@@ -59,7 +59,7 @@ import JobCard from '../components/JobCard.vue'
 import VideoModal from '../components/VideoModal.vue'
 import LogModal from '../components/LogModal.vue'
 
-const statusFilters = ['all', 'pending', 'running', 'stitching', 'completed', 'failed']
+const statusFilters = ['all', 'pending', 'running', 'completed', 'failed']
 
 const allJobs = ref([])
 const loading = ref(true)

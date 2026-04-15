@@ -12,7 +12,7 @@ public class AppProperties {
     private String visScript = "tools/visualize_results.py";
     private String jobsDir = "work_dirs/vis_jobs";
     private String clipsMeta = "clip_preview/clips_meta.json";
-    private String vueDist = "tools/frontend-vue/dist";
+    private String vueDist = "frontend/dist";
 
     public String getProjectRoot() { return projectRoot; }
     public void setProjectRoot(String v) { this.projectRoot = v; }

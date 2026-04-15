@@ -65,7 +65,7 @@
 
 ```bash
 # 进入前端目录
-cd tools/frontend-vue
+cd frontend
 
 # 安装依赖
 npm install
@@ -74,7 +74,7 @@ npm install
 npm run build
 
 # 复制构建产物到后端静态目录
-xcopy /E /Y dist\*.* ..\..\backend\src\main\resources\static\
+xcopy /E /Y dist\*.* ..\backend\src\main\resources\static\
 ```
 
 ### 启动后端

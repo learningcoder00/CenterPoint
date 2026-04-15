@@ -21,4 +21,4 @@ app:
   vis-script: tools/visualize_results.py
   jobs-dir: work_dirs/vis_jobs
   clips-meta: clip_preview/clips_meta.json
-  vue-dist: tools/frontend-vue/dist
+  vue-dist: frontend/dist
