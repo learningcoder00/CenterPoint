@@ -3,7 +3,7 @@
     <div class="hero-content">
       <div class="hero-eyebrow">CenterPoint Visualizer</div>
       <h1>Visualization Results</h1>
-      <p>点击已完成的卡片播放 MP4；running 状态的任务每 5 秒自动刷新。</p>
+      <p>Click a completed card to play the MP4. Jobs that are still running refresh every 5 seconds.</p>
     </div>
     <div class="stats">
       <div class="stat"><span class="label">Total</span><span class="value">{{ stats.total }}</span></div>
@@ -25,7 +25,7 @@
     </div>
     <button class="btn-secondary btn-refresh" @click="load()">
       <span :class="['refresh-icon', { spinning: loading }]">🔄</span>
-      刷新
+      Refresh
     </button>
   </section>
 
@@ -35,7 +35,7 @@
   </div>
   <div v-else-if="!filtered.length" class="empty">
     <div class="empty-icon">📋</div>
-    <div class="empty-message">{{ filterStatus === 'all' ? '还没有任务。去 Clips 页面选择 clip 并提交可视化任务。' : '没有匹配的任务。' }}</div>
+    <div class="empty-message">{{ filterStatus === 'all' ? 'No jobs yet. Go to Clips, pick clips, and submit a visualization job.' : 'No matching jobs.' }}</div>
   </div>
   <div v-else class="grid">
     <JobCard
@@ -107,12 +107,12 @@ function openVideo(job) { videoJob.value = job; videoOpen.value = true }
 function openLog(job) { logJob.value = job; logOpen.value = true }
 
 async function doDelete(jobId) {
-  if (!confirm('确认删除该任务及其产物？')) return
+  if (!confirm('Delete this job and its outputs?')) return
   try {
     await deleteJob(jobId)
     await load()
   } catch (e) {
-    alert(`删除失败: ${e.message}`)
+    alert(`Delete failed: ${e.message}`)
   }
 }
 

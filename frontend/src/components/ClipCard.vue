@@ -13,7 +13,7 @@
 
     <div v-if="selected" class="selected-pill" aria-hidden="true">
       <span class="selected-pill__dot"></span>
-      <span>已选中</span>
+      <span>Selected</span>
     </div>
 
     <div class="preview-shell" @click.stop="$emit('preview', clip)">

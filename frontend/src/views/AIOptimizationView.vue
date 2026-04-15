@@ -469,6 +469,7 @@ onMounted(() => {
 
 .compose-footer {
   margin-top: auto;
+  padding-top: 14px;
   display: flex;
   flex-direction: column;
   gap: 16px;

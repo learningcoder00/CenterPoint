@@ -8,7 +8,7 @@
             <div class="stage-badge">Clip Preview</div>
             <div class="stage-caption">
               <span>{{ frameLabel }}</span>
-              <span>{{ playing ? '播放中' : '已暂停' }}</span>
+              <span>{{ playing ? 'Playing' : 'Paused' }}</span>
             </div>
           </div>
           <div class="preview-toolbar">
@@ -21,8 +21,8 @@
               </div>
             </div>
             <div class="toolbar-actions">
-              <button class="modal-btn" @click="togglePlay">{{ playing ? '暂停' : '播放' }}</button>
-              <button class="modal-btn secondary" @click="$emit('close')">关闭</button>
+              <button class="modal-btn" @click="togglePlay">{{ playing ? 'Pause' : 'Play' }}</button>
+              <button class="modal-btn secondary" @click="$emit('close')">Close</button>
             </div>
           </div>
         </div>
@@ -31,7 +31,7 @@
             <div class="side-head">
               <div>
                 <h3>Tags</h3>
-                <p class="hint">每行输入一个 tag；修改后需要点击“保存 tags”才会写入后端。</p>
+                <p class="hint">One tag per line. Click “Save tags” to persist changes to the server.</p>
               </div>
               <span class="side-badge">{{ tagCount }} tags</span>
             </div>
@@ -47,11 +47,11 @@
               </div>
             </div>
 
-            <textarea v-model="tagText" class="tags-input" placeholder="每行一个 tag&#10;例如：scenic&#10;complex&#10;highway&#10;&#10;输入后请点击“保存 tags”"></textarea>
+            <textarea v-model="tagText" class="tags-input" placeholder="One tag per line&#10;e.g. scenic&#10;complex&#10;highway&#10;&#10;Then click “Save tags”"></textarea>
 
             <div class="side-actions">
-              <button class="btn-primary save-btn" @click="doSaveTags">保存 tags</button>
-              <p :class="['status-msg', statusType]">{{ statusMsg || '修改 tag 后，请点击“保存 tags”进行存储；保存成功后弹窗会自动关闭。' }}</p>
+              <button class="btn-primary save-btn" @click="doSaveTags">Save tags</button>
+              <p :class="['status-msg', statusType]">{{ statusMsg || 'After editing tags, click “Save tags” to store them. The dialog closes automatically on success.' }}</p>
             </div>
           </div>
         </div>
@@ -135,11 +135,11 @@ watch(() => props.fps, () => {
 async function doSaveTags() {
   if (!clip.value) return
   const tags = tagText.value.split('\n').map(t => t.trim()).filter(Boolean)
-  statusMsg.value = '保存中…'
+  statusMsg.value = 'Saving…'
   statusType.value = ''
   try {
     await saveTags(clip.value.clip_id, tags)
-    statusMsg.value = '已保存。'
+    statusMsg.value = 'Saved.'
     statusType.value = 'ok'
     emit('tags-saved', clip.value.clip_id)
     // 自动关闭弹窗
@@ -147,7 +147,7 @@ async function doSaveTags() {
       emit('close')
     }, 500)
   } catch (e) {
-    statusMsg.value = `保存失败: ${e.message}`
+    statusMsg.value = `Save failed: ${e.message}`
     statusType.value = 'error'
   }
 }

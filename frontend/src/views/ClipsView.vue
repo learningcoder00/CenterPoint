@@ -3,7 +3,7 @@
     <div class="hero-copy">
       <div class="hero-eyebrow">CenterPoint Workflow</div>
       <h1>nuScenes Clip Preview</h1>
-      <p>多选卡片后点击底部“开始可视化”提交任务；单击卡片可预览帧序列并编辑 tags。</p>
+      <p>Select clips, Start visualization below — or click a card to preview and edit tags.</p>
     </div>
 
     <div class="stats">
@@ -49,8 +49,8 @@
     </div>
 
     <div class="control-actions">
-      <button class="btn-secondary" @click="selectAllVisible">全选当前结果</button>
-      <button class="btn-secondary" @click="selectedIds.clear()">取消选择</button>
+      <button class="btn-secondary" @click="selectAllVisible">Select all visible</button>
+      <button class="btn-secondary" @click="selectedIds.clear()">Clear selection</button>
     </div>
   </section>
 
@@ -78,9 +78,9 @@
 
   <Teleport to="body">
     <div :class="['sel-bar', { visible: selectedIds.size > 0 }]">
-      <span class="count">{{ selectedIds.size }} 个已选</span>
-      <button class="btn-primary" @click="showSubmit = true">开始可视化</button>
-      <button class="btn-secondary" @click="selectedIds.clear()">取消选择</button>
+      <span class="count">{{ selectedIds.size }} selected</span>
+      <button class="btn-primary" @click="showSubmit = true">Start visualization</button>
+      <button class="btn-secondary" @click="selectedIds.clear()">Clear selection</button>
     </div>
   </Teleport>
 
@@ -121,7 +121,7 @@ const previewClipId = ref('')
 const showSubmit = ref(false)
 
 const searchScopeOptions = [
-  { value: 'all', label: '全部' },
+  { value: 'all', label: 'All' },
   { value: 'clip_id', label: 'clip id' },
   { value: 'start_token', label: 'start token' },
   { value: 'tag', label: 'tag' },
@@ -130,10 +130,10 @@ const searchScopeOptions = [
 const totalFrames = computed(() => allClips.value.reduce((s, c) => s + c.frame_count, 0))
 const searchPlaceholder = computed(() => {
   const placeholders = {
-    all: '按 clip id、start token 或 tag 模糊搜索',
-    clip_id: '仅按 clip id 模糊搜索',
-    start_token: '仅按 start token 模糊搜索',
-    tag: '仅按 tag 模糊搜索',
+    all: 'Search by clip id, start token, or tag',
+    clip_id: 'Search by clip id only',
+    start_token: 'Search by start token only',
+    tag: 'Search by tag only',
   }
   return placeholders[searchScope.value] || placeholders.all
 })
