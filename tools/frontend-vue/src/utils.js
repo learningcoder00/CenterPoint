@@ -2,9 +2,13 @@ export function fmtDuration(s) {
   return `${s.toFixed(1)}s`
 }
 
+/** Backend stores Unix time as seconds; JS Date expects ms. Values >= 1e12 are treated as ms. */
 export function fmtTime(ts) {
-  if (!ts) return '—'
-  return new Date(ts * 1000).toLocaleString()
+  if (ts == null || ts === '') return '—'
+  const n = Number(ts)
+  if (!Number.isFinite(n)) return '—'
+  const ms = n < 1e12 ? n * 1000 : n
+  return new Date(ms).toLocaleString()
 }
 
 export function fmtStatus(s) {

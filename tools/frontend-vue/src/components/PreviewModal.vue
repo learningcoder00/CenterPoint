@@ -104,6 +104,10 @@ async function doSaveTags() {
     statusMsg.value = '已保存。'
     statusType.value = 'ok'
     emit('tags-saved', clip.value.clip_id)
+    // 自动关闭弹窗
+    setTimeout(() => {
+      emit('close')
+    }, 500)
   } catch (e) {
     statusMsg.value = `保存失败: ${e.message}`
     statusType.value = 'error'

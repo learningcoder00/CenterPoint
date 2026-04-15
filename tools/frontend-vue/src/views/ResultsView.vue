@@ -1,6 +1,7 @@
 <template>
   <section class="hero">
     <div class="hero-content">
+      <div class="hero-eyebrow">CenterPoint Visualizer</div>
       <h1>Visualization Results</h1>
       <p>点击已完成的卡片播放 MP4；running 状态的任务每 5 秒自动刷新。</p>
     </div>
@@ -14,22 +15,22 @@
 
   <section class="controls">
     <div class="search-box">
-      <span class="search-icon">🔍</span>
+      <div class="search-icon-wrapper">🔍</div>
       <input v-model="search" type="text" placeholder="Search by clip id or job id">
+      <div class="filter-btns">
+        <button v-for="s in statusFilters" :key="s" :class="['filter-btn', { active: filterStatus === s }]" @click="filterStatus = s">
+          {{ s === 'all' ? 'All' : fmtStatus(s) }}
+        </button>
+      </div>
     </div>
-    <div class="filter-btns">
-      <button v-for="s in statusFilters" :key="s" :class="['filter-btn', { active: filterStatus === s }]" @click="filterStatus = s">
-        {{ s === 'all' ? 'All' : fmtStatus(s) }}
-      </button>
-    </div>
-    <button class="btn-refresh" @click="load()">
-      <span class="refresh-icon">🔄</span>
+    <button class="btn-secondary btn-refresh" @click="load()">
+      <span :class="['refresh-icon', { spinning: loading }]">🔄</span>
       刷新
     </button>
   </section>
 
-  <div v-if="loading" class="loading-container">
-    <div class="loading-spinner"></div>
+  <div v-if="loading" class="loading">
+    <div class="spinner"></div>
     <div class="loading-text">Loading jobs…</div>
   </div>
   <div v-else-if="!filtered.length" class="empty">
@@ -141,56 +142,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.hero {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  padding: 24px;
-  background: var(--panel);
-  border-radius: 16px;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-}
-
-.hero-content h1 {
-  margin: 0 0 8px 0;
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.hero-content p {
-  margin: 0;
-  font-size: 14px;
-  color: var(--text-muted);
-}
-
-.stats {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-}
-
-.stat {
-  text-align: center;
-  min-width: 80px;
-}
-
-.stat .label {
-  display: block;
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 4px;
-}
-
-.stat .value {
-  display: block;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text);
-}
-
 .controls {
   display: flex;
   gap: 16px;
@@ -199,88 +150,18 @@ onUnmounted(() => {
   align-items: center;
 }
 
-.search-box {
-  position: relative;
-  flex: 1;
-  min-width: 200px;
-}
-
-.search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-muted);
-  font-size: 14px;
-}
-
-.search-box input {
-  width: 100%;
-  padding: 10px 12px 10px 36px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--panel);
-  color: var(--text);
-  font-size: 14px;
-  transition: all 0.3s ease;
-}
-
-.search-box input:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-}
-
-.filter-btns {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.filter-btn {
-  padding: 8px 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel);
-  color: var(--text);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  white-space: nowrap;
-}
-
-.filter-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.filter-btn.active {
-  background: var(--primary);
-  color: white;
-  border-color: var(--primary);
-}
-
 .btn-refresh {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--panel);
-  color: var(--text);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  white-space: nowrap;
-}
-
-.btn-refresh:hover {
-  background: rgba(255, 255, 255, 0.08);
-  transform: translateY(-1px);
+  gap: 8px;
+  align-self: stretch;
 }
 
 .refresh-icon {
   font-size: 14px;
+}
+
+.refresh-icon.spinning {
   animation: spin 2s linear infinite;
 }
 
@@ -289,52 +170,9 @@ onUnmounted(() => {
   to { transform: rotate(360deg); }
 }
 
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
-}
-
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid var(--border);
-  border-top: 3px solid var(--primary);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 16px;
-}
-
 .loading-text {
-  color: var(--text-muted);
+  color: var(--muted);
   font-size: 14px;
-}
-
-.empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
-  background: var(--panel);
-  border-radius: 16px;
-  border: 1px solid var(--border);
-}
-
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-  color: var(--text-muted);
-}
-
-.empty-message {
-  color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1.5;
 }
 
 .grid {

@@ -15,23 +15,23 @@
       <div class="card-meta">
         <div class="meta-item">
           <span class="meta-label">Created:</span>
-          <span class="meta-value">{{ formatTime(job.created_at) }}</span>
+          <span class="meta-value">{{ fmtTime(job.created_at) }}</span>
         </div>
         <div class="meta-item" v-if="job.completed_at">
           <span class="meta-label">Completed:</span>
-          <span class="meta-value">{{ formatTime(job.completed_at) }}</span>
+          <span class="meta-value">{{ fmtTime(job.completed_at) }}</span>
         </div>
       </div>
       <div class="card-actions">
-        <button v-if="job.status === 'completed'" class="action-btn play" @click.stop="$emit('play-video', job)">
+        <button v-if="job.status === 'completed'" class="btn-primary" @click.stop="$emit('play-video', job)">
           <span class="btn-icon">▶</span>
           Play
         </button>
-        <button class="action-btn log" @click.stop="$emit('show-log', job)">
+        <button class="btn-secondary" @click.stop="$emit('show-log', job)">
           <span class="btn-icon">📋</span>
           Log
         </button>
-        <button class="action-btn delete" @click.stop="$emit('delete', job.job_id)">
+        <button class="btn-secondary delete-btn" @click.stop="$emit('delete', job.job_id)">
           <span class="btn-icon">🗑</span>
           Delete
         </button>
@@ -41,7 +41,7 @@
 </template>
 
 <script setup>
-import { fmtStatus } from '../utils.js'
+import { fmtStatus, fmtTime } from '../utils.js'
 
 const props = defineProps({
   job: Object
@@ -54,11 +54,6 @@ function resolveImgSrc(path) {
   return path
 }
 
-function formatTime(t) {
-  if (!t) return ''
-  return new Date(t).toLocaleString()
-}
-
 function cardClick() {
   if (props.job.status === 'completed') {
     emit('play-video', props.job)
@@ -68,18 +63,19 @@ function cardClick() {
 
 <style scoped>
 .card {
-  background: var(--panel);
-  border-radius: 16px;
+  position: relative;
+  background: var(--card-bg);
+  border-radius: 20px;
   border: 1px solid var(--border);
   overflow: hidden;
   box-shadow: var(--shadow);
-  transition: all .3s ease;
+  transition: all .24s var(--ease-out);
   cursor: default;
 }
 
 .card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(0,0,0,.2);
+  border-color: var(--card-hover-border);
 }
 
 .card.clickable {
@@ -90,14 +86,14 @@ function cardClick() {
   position: relative;
   height: 180px;
   overflow: hidden;
-  background: var(--background);
+  background: #0a0d16;
 }
 
 .thumb {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform .3s ease;
+  transition: transform .3s var(--ease-out);
 }
 
 .card:hover .thumb {
@@ -108,43 +104,44 @@ function cardClick() {
   position: absolute;
   top: 12px;
   right: 12px;
-  padding: 4px 12px;
+  padding: 6px 12px;
   border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .5px;
+  letter-spacing: .06em;
   z-index: 1;
+  backdrop-filter: blur(8px);
 }
 
 .status-badge.pending {
-  background: rgba(255, 193, 7, 0.2);
+  background: rgba(255, 193, 7, 0.14);
   color: #ffc107;
-  border: 1px solid rgba(255, 193, 7, 0.4);
+  border: 1px solid rgba(255, 193, 7, 0.24);
 }
 
 .status-badge.running {
-  background: rgba(0, 123, 255, 0.2);
+  background: rgba(0, 123, 255, 0.14);
   color: #007bff;
-  border: 1px solid rgba(0, 123, 255, 0.4);
+  border: 1px solid rgba(0, 123, 255, 0.24);
 }
 
 .status-badge.stitching {
-  background: rgba(108, 117, 125, 0.2);
+  background: rgba(108, 117, 125, 0.14);
   color: #6c757d;
-  border: 1px solid rgba(108, 117, 125, 0.4);
+  border: 1px solid rgba(108, 117, 125, 0.24);
 }
 
 .status-badge.completed {
-  background: rgba(25, 135, 84, 0.2);
+  background: rgba(25, 135, 84, 0.14);
   color: #198754;
-  border: 1px solid rgba(25, 135, 84, 0.4);
+  border: 1px solid rgba(25, 135, 84, 0.24);
 }
 
 .status-badge.failed {
-  background: rgba(220, 53, 69, 0.2);
+  background: rgba(220, 53, 69, 0.14);
   color: #dc3545;
-  border: 1px solid rgba(220, 53, 69, 0.4);
+  border: 1px solid rgba(220, 53, 69, 0.24);
 }
 
 .progress-bar {
@@ -159,7 +156,7 @@ function cardClick() {
 
 .progress {
   height: 100%;
-  background: var(--primary);
+  background: var(--accent);
   transition: width .3s ease;
   animation: progress 2s ease-in-out infinite;
 }
@@ -170,20 +167,20 @@ function cardClick() {
 }
 
 .card-content {
-  padding: 16px;
+  padding: 18px;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .clip-id {
   margin: 0;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--text);
   flex: 1;
   overflow: hidden;
@@ -192,91 +189,52 @@ function cardClick() {
 }
 
 .job-id {
-  font-size: 12px;
-  color: var(--text-muted);
-  background: rgba(255,255,255,.05);
-  padding: 2px 8px;
-  border-radius: 4px;
-  margin-left: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--panel-alt);
+  padding: 4px 10px;
+  border-radius: 8px;
+  margin-left: 10px;
   white-space: nowrap;
+  font-weight: 600;
 }
 
 .card-meta {
-  margin-bottom: 16px;
-  font-size: 12px;
-  color: var(--text-muted);
+  margin-bottom: 18px;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .meta-item {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .meta-label {
-  color: var(--text-muted);
+  color: var(--muted);
 }
 
 .meta-value {
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .card-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
-.action-btn {
+.card-actions button {
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text);
+  padding: 10px 12px;
   font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all .3s ease;
 }
 
-.action-btn:hover {
-  background: rgba(255,255,255,.08);
-  transform: translateY(-1px);
-}
-
-.action-btn.play {
-  background: var(--primary);
-  color: white;
-  border-color: var(--primary);
-}
-
-.action-btn.play:hover {
-  background: rgba(59, 130, 246, 0.9);
-}
-
-.action-btn.log {
-  background: rgba(108, 117, 125, 0.2);
-  color: #6c757d;
-  border-color: rgba(108, 117, 125, 0.4);
-}
-
-.action-btn.log:hover {
-  background: rgba(108, 117, 125, 0.3);
-}
-
-.action-btn.delete {
-  background: rgba(220, 53, 69, 0.2);
-  color: #dc3545;
-  border-color: rgba(220, 53, 69, 0.4);
-}
-
-.action-btn.delete:hover {
-  background: rgba(220, 53, 69, 0.3);
+.delete-btn:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(220, 53, 69, 0.08);
 }
 
 .btn-icon {
@@ -287,10 +245,6 @@ function cardClick() {
 @media (max-width: 768px) {
   .card-actions {
     flex-direction: column;
-  }
-  
-  .action-btn {
-    width: 100%;
   }
 }
 </style>

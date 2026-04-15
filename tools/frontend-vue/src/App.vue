@@ -5,7 +5,7 @@
         <nav class="nav" aria-label="Primary">
           <router-link to="/clips">Clips</router-link>
           <router-link to="/results">Results</router-link>
-          <router-link to="/ai-optimization">AI 优化</router-link>
+          <router-link to="/ai-optimization">AI Optimization</router-link>
         </nav>
       </div>
 
@@ -107,7 +107,7 @@ watch(theme, (nextTheme) => {
 .topbar {
   width: min(1500px, calc(100vw - 32px));
   margin: 0 auto;
-  padding-top: 24px;
+  padding: 20px 0 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -121,12 +121,13 @@ watch(theme, (nextTheme) => {
 
 .theme-toggle {
   position: relative;
-  width: 56px;
-  height: 56px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  box-shadow: none;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--nav-bg);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -140,7 +141,8 @@ watch(theme, (nextTheme) => {
 }
 
 .theme-toggle:hover {
-  transform: translateY(-2px) scale(1.04);
+  transform: translateY(-2px);
+  border-color: var(--accent);
 }
 
 .theme-toggle:active {
@@ -153,19 +155,7 @@ watch(theme, (nextTheme) => {
 }
 
 .theme-toggle__halo {
-  position: absolute;
-  inset: 6px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, var(--toggle-bg-top), var(--toggle-bg-bottom));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    var(--toggle-shadow);
-  opacity: 1;
-  transition:
-    opacity .28s var(--ease-out),
-    transform .28s var(--ease-out),
-    background .28s var(--ease-out),
-    box-shadow .28s var(--ease-out);
+  display: none;
 }
 
 .theme-toggle__halo::before {

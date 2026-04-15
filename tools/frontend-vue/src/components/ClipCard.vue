@@ -320,7 +320,7 @@ onUnmounted(() => {
 }
 
 .card-body {
-  padding: 16px 16px 14px;
+  padding: 16px 16px 8px;
   cursor: pointer;
 }
 
@@ -409,7 +409,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-top: 14px;
+  padding-top: 10px;
 }
 
 .card-tags-label {
@@ -431,7 +431,7 @@ onUnmounted(() => {
 }
 
 .tag-list {
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 .tag-list.empty {

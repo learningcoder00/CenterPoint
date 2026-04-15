@@ -12,7 +12,7 @@
         <div v-else>
           <div class="video-container">
             <video ref="videoRef" controls autoplay class="video-player">
-              <source :src="job.output_path" type="video/mp4">
+              <source :src="videoSrc" type="video/mp4">
               Your browser does not support the video tag.
             </video>
           </div>
@@ -31,7 +31,7 @@
             </div>
             <div class="info-row" v-if="job.completed_at">
               <span class="info-label">Completed:</span>
-              <span class="info-value">{{ formatTime(job.completed_at) }}</span>
+              <span class="info-value">{{ fmtTime(job.completed_at) }}</span>
             </div>
           </div>
         </div>
@@ -44,8 +44,9 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { fmtStatus } from '../utils.js'
+import { computed, nextTick, ref, watch, onMounted, onUnmounted } from 'vue'
+import { fmtStatus, fmtTime } from '../utils.js'
+import { videoUrl } from '../api.js'
 
 const props = defineProps({
   visible: Boolean,
@@ -54,11 +55,10 @@ const props = defineProps({
 
 const emit = defineEmits(['close'])
 const videoRef = ref(null)
-
-function formatTime(t) {
-  if (!t) return ''
-  return new Date(t).toLocaleString()
-}
+const videoSrc = computed(() => {
+  const jobId = props.job?.job_id
+  return jobId ? videoUrl(jobId) : ''
+})
 
 function onKeydown(e) {
   if (e.key === 'Escape') {
@@ -66,13 +66,19 @@ function onKeydown(e) {
   }
 }
 
-watch(() => props.visible, (newVal) => {
-  if (newVal && videoRef.value) {
+watch(
+  () => [props.visible, props.job?.job_id],
+  async ([visible]) => {
+    if (!visible) {
+      if (videoRef.value) videoRef.value.pause()
+      return
+    }
+    await nextTick()
+    if (!videoRef.value || !videoSrc.value) return
+    videoRef.value.load()
     videoRef.value.play().catch(e => console.log('Video play failed:', e))
-  } else if (!newVal && videoRef.value) {
-    videoRef.value.pause()
   }
-})
+)
 
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)

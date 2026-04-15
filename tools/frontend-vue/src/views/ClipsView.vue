@@ -1,12 +1,12 @@
 ﻿<template>
-  <section class="hero hero-clip">
+  <section class="hero">
     <div class="hero-copy">
       <div class="hero-eyebrow">CenterPoint Workflow</div>
       <h1>nuScenes Clip Preview</h1>
       <p>多选卡片后点击底部“开始可视化”提交任务；单击卡片可预览帧序列并编辑 tags。</p>
     </div>
 
-    <div class="stats stats-hero">
+    <div class="stats">
       <div class="stat">
         <span class="label">Clips</span>
         <span class="value">{{ allClips.length || '--' }}</span>
@@ -27,46 +27,41 @@
     </div>
   </section>
 
-  <section class="controls controls-upgraded">
-    <div class="search-box search-box-upgraded">
-      <div class="search-icon" aria-hidden="true">
-        <span></span>
-      </div>
-      <div class="search-copy">
-        <span class="search-label">Search clips</span>
-        <input
-          v-model="search"
-          type="text"
-          :placeholder="searchPlaceholder"
+  <section class="controls">
+    <div class="search-box">
+      <div class="search-icon-wrapper">🔍</div>
+      <input
+        v-model="search"
+        type="text"
+        :placeholder="searchPlaceholder"
+      >
+      <div class="filter-btns">
+        <button
+          v-for="option in searchScopeOptions"
+          :key="option.value"
+          type="button"
+          :class="['filter-btn', { active: searchScope === option.value }]"
+          @click="searchScope = option.value"
         >
-        <div class="search-scope-row">
-          <span class="search-scope-title">搜索范围</span>
-          <div class="search-scope" role="tablist" aria-label="搜索范围">
-            <button
-              v-for="option in searchScopeOptions"
-              :key="option.value"
-              type="button"
-              :class="['scope-chip', { active: searchScope === option.value }]"
-              @click="searchScope = option.value"
-            >
-              {{ option.label }}
-            </button>
-          </div>
-        </div>
+          {{ option.label }}
+        </button>
       </div>
-      <span v-if="search" class="search-result-pill">
-        找到 {{ filteredClips.length }} 个结果
-      </span>
     </div>
 
     <div class="control-actions">
-      <button class="btn-secondary control-btn" @click="selectAllVisible">全选当前结果</button>
-      <button class="btn-secondary control-btn" @click="selectedIds.clear()">取消选择</button>
+      <button class="btn-secondary" @click="selectAllVisible">全选当前结果</button>
+      <button class="btn-secondary" @click="selectedIds.clear()">取消选择</button>
     </div>
   </section>
 
-  <div v-if="loading" class="loading">Loading clips...</div>
-  <div v-else-if="!filteredClips.length" class="empty">No clips match.</div>
+  <div v-if="loading" class="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">Loading clips...</div>
+  </div>
+  <div v-else-if="!filteredClips.length" class="empty">
+    <div class="empty-icon">🎬</div>
+    <div class="empty-message">No clips match.</div>
+  </div>
   <div v-else class="grid">
     <ClipCard
       v-for="c in filteredClips"
@@ -84,8 +79,8 @@
   <Teleport to="body">
     <div :class="['sel-bar', { visible: selectedIds.size > 0 }]">
       <span class="count">{{ selectedIds.size }} 个已选</span>
-      <button class="btn btn-vis" @click="showSubmit = true">开始可视化</button>
-      <button class="btn btn-clear" @click="selectedIds.clear()">取消选择</button>
+      <button class="btn-primary" @click="showSubmit = true">开始可视化</button>
+      <button class="btn-secondary" @click="selectedIds.clear()">取消选择</button>
     </div>
   </Teleport>
 
@@ -201,191 +196,18 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.hero-clip {
-  position: relative;
-  overflow: hidden;
-}
-
-.hero-clip::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 12% 16%, rgba(125, 211, 252, 0.15), transparent 28%),
-    radial-gradient(circle at 88% 18%, rgba(192, 132, 252, 0.12), transparent 26%);
-  pointer-events: none;
-}
-
-.hero-copy {
-  position: relative;
-  z-index: 1;
-  max-width: 760px;
-}
-
-.hero-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 11px;
-  border-radius: 999px;
-  margin-bottom: 12px;
-  background: rgba(125, 211, 252, 0.10);
-  border: 1px solid rgba(125, 211, 252, 0.16);
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-}
-
-.stats-hero {
-  position: relative;
-  z-index: 1;
-  max-width: 460px;
-}
-
-.controls-upgraded {
-  align-items: stretch;
-  gap: 16px;
-}
-
-.search-box-upgraded {
-  min-height: 74px;
-  padding: 12px 18px;
-  gap: 14px;
-  border-radius: 18px;
-}
-
-.search-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 13px;
-  background: rgba(125, 211, 252, 0.12);
-  border: 1px solid rgba(125, 211, 252, 0.18);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.search-icon span {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--accent);
-  border-radius: 50%;
-  position: relative;
-}
-
-.search-icon span::after {
-  content: '';
-  position: absolute;
-  width: 8px;
-  height: 2px;
-  right: -5px;
-  bottom: -2px;
-  background: var(--accent);
-  border-radius: 999px;
-  transform: rotate(45deg);
-  transform-origin: center;
-}
-
-.search-copy {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.search-scope-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 2px;
-  flex-wrap: wrap;
-}
-
-.search-scope-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.search-scope {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.scope-chip {
-  padding: 5px 11px;
-  border-radius: 999px;
-  border: 1px solid rgba(125, 211, 252, 0.14);
-  background: rgba(125, 211, 252, 0.05);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .03em;
-  cursor: pointer;
-  transition:
-    background .18s var(--ease-out),
-    border-color .18s var(--ease-out),
-    color .18s var(--ease-out),
-    transform .18s var(--ease-out),
-    box-shadow .18s var(--ease-out);
-}
-
-.scope-chip:hover {
-  border-color: rgba(125, 211, 252, 0.26);
-  color: var(--text);
-  transform: translateY(-1px);
-}
-
-.scope-chip.active {
-  background: rgba(125, 211, 252, 0.16);
-  border-color: rgba(125, 211, 252, 0.28);
-  color: var(--accent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-.search-label {
-  color: var(--muted);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .12em;
-  font-weight: 700;
-}
-
-.search-result-pill {
-  align-self: center;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(125, 211, 252, 0.12);
-  border: 1px solid rgba(125, 211, 252, 0.16);
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
 .control-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
   align-items: stretch;
+  align-self: stretch;
 }
 
-.control-btn {
-  min-width: 154px;
-  min-height: 74px;
-  padding: 0 20px;
-  border-radius: 18px;
-  font-size: 13px;
-  font-weight: 700;
+.control-actions .btn-secondary {
+  height: 100%;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
 }
 
 .sel-bar {
@@ -395,11 +217,11 @@ onMounted(async () => {
   left: 50%;
   transform: translateX(-50%);
   z-index: 500;
-  gap: 14px;
+  gap: 16px;
   align-items: center;
   padding: 14px 24px;
   border: 1px solid var(--selection-bar-border);
-  border-radius: 18px;
+  border-radius: 20px;
   background: var(--selection-bar-bg);
   backdrop-filter: blur(12px);
   box-shadow: var(--selection-bar-shadow);
@@ -418,47 +240,11 @@ onMounted(async () => {
   font-size: 15px;
   font-weight: 700;
   color: var(--accent);
-}
-
-.sel-bar .btn {
-  padding: 9px 18px;
-  border-radius: 10px;
-  border: 0;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  transition:
-    background .18s var(--ease-out),
-    color .18s var(--ease-out),
-    transform .18s var(--ease-out);
-}
-
-.sel-bar .btn:active {
-  transform: scale(.98);
-}
-
-.sel-bar .btn-vis {
-  background: var(--accent);
-  color: var(--primary-btn-text);
-}
-
-.sel-bar .btn-vis:hover {
-  background: var(--primary-btn-hover-bg);
-}
-
-.sel-bar .btn-clear {
-  background: var(--selection-bar-secondary-bg);
-  color: var(--selection-bar-secondary-text);
-  border: 1px solid var(--selection-bar-secondary-border);
-}
-
-.sel-bar .btn-clear:hover {
-  background: var(--selection-bar-secondary-hover);
-  color: var(--text);
+  margin-right: 8px;
 }
 
 .fps-control {
-  min-width: 150px;
+  min-width: 138px;
 }
 
 .fps-row {

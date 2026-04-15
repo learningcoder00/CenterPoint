@@ -1,12 +1,12 @@
 <template>
-  <section class="hero hero-ai">
+  <section class="hero">
     <div class="hero-copy">
       <div class="hero-eyebrow">CenterPoint Intelligence</div>
-      <h1>AI 优化建议</h1>
-      <p>提交作业 ID 和问题描述，获取 AI 生成的优化建议。</p>
+      <h1>AI Optimization</h1>
+      <p>Submit job ID and problem description to get AI-generated optimization suggestions.</p>
     </div>
 
-    <div class="stats stats-ai">
+    <div class="stats">
       <div class="stat">
         <span class="label">Requests</span>
         <span class="value">{{ stats.total }}</span>
@@ -18,126 +18,155 @@
     </div>
   </section>
 
-  <section class="controls controls-ai">
-    <div class="search-box search-box-ai">
-      <span>Filter</span>
-      <input v-model="search" type="text" placeholder="按 job id、clip id 或问题描述搜索">
-      <span v-if="search" class="badge search-count">{{ filteredOptimizations.length }} results</span>
+  <section class="controls">
+    <div class="search-box">
+      <div class="search-icon-wrapper">🔍</div>
+      <input v-model="search" type="text" placeholder="Search by job ID, clip ID or description">
     </div>
 
     <div class="control-actions">
-      <button class="btn-secondary btn-refresh" type="button" @click="loadOptimizations">刷新列表</button>
-      <button class="btn-secondary btn-refresh" type="button" @click="resetForm">清空表单</button>
+      <button class="btn-secondary" type="button" @click="loadOptimizations">Refresh List</button>
+      <button class="btn-secondary" type="button" @click="resetForm">Clear Form</button>
     </div>
   </section>
 
   <section class="ai-layout">
-    <article class="card compose-card">
-      <div class="compose-head">
-        <div>
-          <div class="section-kicker">Submit Request</div>
-          <h2>提交优化请求</h2>
-        </div>
-        <span class="badge compose-badge">{{ form.jobId ? 'Job linked' : 'Awaiting job id' }}</span>
-      </div>
-
-      <div class="compose-grid">
-        <div class="field">
-          <label for="jobId">作业 ID</label>
-          <input id="jobId" v-model.trim="form.jobId" type="text" placeholder="例如 job_20260413_001">
+    <div class="compose-section">
+      <article class="card compose-card">
+        <div class="compose-head">
+          <div>
+            <div class="section-kicker">Submit Request</div>
+            <h2>New Request</h2>
+          </div>
+          <span :class="['badge', 'status-badge-pill', { 'linked': form.jobId }]">
+            {{ form.jobId ? 'Job Linked' : 'Awaiting Job ID' }}
+          </span>
         </div>
 
-        <div class="field field-note">
-          <label>当前状态</label>
-          <div class="field-note__content">
-            <span class="note-pill">{{ isSubmitting ? '提交中' : '可提交' }}</span>
-            <span class="note-text">输入作业 ID 和问题描述后，即可生成对应的优化建议。</span>
+        <div class="compose-grid">
+          <div class="field">
+            <label for="jobId">Job ID</label>
+            <div class="input-wrapper">
+              <input id="jobId" v-model.trim="form.jobId" type="text" placeholder="e.g. job_20260413_001">
+              <span class="input-icon">🆔</span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Current Status</label>
+            <div class="status-indicator-box">
+              <div :class="['status-dot', { 'active': !isSubmitting }]"></div>
+              <span class="status-text">{{ isSubmitting ? 'Submitting...' : 'Ready to Submit' }}</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="field field-textarea">
-        <label for="description">问题描述</label>
-        <textarea
-          id="description"
-          v-model.trim="form.description"
-          placeholder="描述检测结果的不足或问题"
-        ></textarea>
-      </div>
-
-      <div class="compose-actions">
-        <button class="btn-primary" type="button" :disabled="isSubmitting" @click="submitRequest">
-          {{ isSubmitting ? '提交中...' : '提交请求' }}
-        </button>
-        <p class="compose-tip">提交后会自动刷新优化建议列表，并展示本次返回结果。</p>
-      </div>
-    </article>
-
-    <article class="card response-card">
-      <div class="compose-head">
-        <div>
-          <div class="section-kicker">Latest Response</div>
-          <h2>AI 优化建议</h2>
+        <div class="field field-textarea">
+          <label for="description">Problem Description</label>
+          <textarea
+            id="description"
+            v-model.trim="form.description"
+            placeholder="Describe the issues or areas for improvement in detail..."
+          ></textarea>
         </div>
-        <span class="badge compose-badge">{{ response ? 'Ready' : 'Waiting' }}</span>
-      </div>
 
-      <div v-if="response" class="response-panel">
-        <pre>{{ response }}</pre>
-      </div>
-      <div v-else class="response-empty">
-        提交一个请求后，AI 返回的优化建议会显示在这里。
-      </div>
-    </article>
+        <div class="compose-footer">
+          <button class="btn-primary submit-btn" type="button" :disabled="isSubmitting" @click="submitRequest">
+            <span v-if="isSubmitting" class="spinner-small"></span>
+            {{ isSubmitting ? 'Processing...' : 'Generate Suggestions' }}
+          </button>
+          <p class="compose-tip">AI will analyze your job and provide targeted improvements.</p>
+        </div>
+      </article>
+    </div>
+
+    <div class="response-section">
+      <article class="card response-card">
+        <div class="compose-head">
+          <div>
+            <div class="section-kicker">Latest Analysis</div>
+            <h2>AI Insights</h2>
+          </div>
+          <div :class="['response-status', { 'has-data': response }]">
+            {{ response ? 'Analysis Ready' : 'Waiting for Input' }}
+          </div>
+        </div>
+
+        <div v-if="response" class="response-container">
+          <div class="response-header-bar">
+            <span class="response-icon">✨</span>
+            <span class="response-label">AI Generated Suggestions</span>
+          </div>
+          <div class="response-panel">
+            <pre>{{ response }}</pre>
+          </div>
+        </div>
+        <div v-else class="response-empty">
+          <div class="empty-visual">
+            <div class="pulse-circle"></div>
+            <div class="ai-icon-large">🤖</div>
+          </div>
+          <p>Submit a request on the left to see AI-generated optimization insights here.</p>
+        </div>
+      </article>
+    </div>
   </section>
 
-  <div v-if="loadingOptimizations" class="loading">Loading optimizations…</div>
+  <div class="section-divider">
+    <span class="divider-text">Optimization History</span>
+  </div>
+
+  <div v-if="loadingOptimizations" class="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">Loading optimizations…</div>
+  </div>
   <div v-else-if="!filteredOptimizations.length" class="empty">
-    还没有优化建议。你可以从 Results 页点击 “AI优化”，或者直接在这里输入 job id 提交请求。
+    <div class="empty-icon">💡</div>
+    <div class="empty-message">No optimization history found. Start by submitting a new request above.</div>
   </div>
   <div v-else class="grid ai-grid">
     <article v-for="opt in filteredOptimizations" :key="opt.id" class="card optimization-card">
       <div class="optimization-top">
-        <div>
-          <div class="section-kicker">Job</div>
-          <h2 class="optimization-title">{{ getJobId(opt) || '未知作业' }}</h2>
+        <div class="opt-id-block">
+          <div class="section-kicker">Job ID</div>
+          <h2 class="optimization-title">{{ getJobId(opt) || 'Unknown Job' }}</h2>
+          <span class="badge timestamp-badge">{{ formatDate(getCreatedAt(opt)) }}</span>
         </div>
         <div class="optimization-actions">
-          <span class="badge timestamp-badge">{{ formatDate(getCreatedAt(opt)) }}</span>
-          <button class="delete-btn" type="button" @click="removeOptimization(opt.id)">删除</button>
+          <button class="delete-icon-btn" type="button" @click="removeOptimization(opt.id)" title="Delete">
+            🗑️
+          </button>
         </div>
       </div>
 
       <div class="meta optimization-meta">
         <div class="meta-item">
           <span class="label">Clip ID</span>
-          <span class="value">{{ getClipId(opt) || '未知 clip' }}</span>
+          <span class="value">{{ getClipId(opt) || 'Unknown clip' }}</span>
         </div>
         <div class="meta-item">
-          <span class="label">Request</span>
-          <span class="value">{{ summarizeText(opt.description || '无描述') }}</span>
-        </div>
-        <div class="meta-item">
-          <span class="label">Response Size</span>
+          <span class="label">Response Length</span>
           <span class="value">{{ responseLength(opt.response) }}</span>
         </div>
       </div>
 
-      <div class="optimization-block">
-        <div class="block-label">问题描述</div>
-        <p class="optimization-text">{{ opt.description || '无' }}</p>
+      <div class="optimization-block request-block">
+        <div class="block-label">User Request</div>
+        <p class="optimization-text">{{ opt.description || 'N/A' }}</p>
       </div>
 
-      <div class="optimization-block">
+      <div class="optimization-block suggestions-block">
         <div class="block-header">
-          <span class="block-label">优化建议</span>
-          <button class="toggle-btn" type="button" @click="toggleExpand(opt.id)">
-            {{ expandedOptimizations[opt.id] ? '收起' : '展开全文' }}
+          <span class="block-label">AI Suggestions</span>
+          <button class="toggle-btn-modern" type="button" @click="toggleExpand(opt.id)">
+            {{ expandedOptimizations[opt.id] ? 'Show Less' : 'View Full Analysis' }}
+            <span :class="['arrow', { 'up': expandedOptimizations[opt.id] }]">↓</span>
           </button>
         </div>
 
-        <div :class="['response-content', { expanded: expandedOptimizations[opt.id] }]">
+        <div :class="['response-content-modern', { expanded: expandedOptimizations[opt.id] }]">
           <pre>{{ opt.response }}</pre>
+          <div v-if="!expandedOptimizations[opt.id]" class="fade-overlay"></div>
         </div>
       </div>
     </article>
@@ -192,7 +221,7 @@ const filteredOptimizations = computed(() => {
 })
 
 function formatDate(timestamp) {
-  if (!timestamp) return '未知时间'
+  if (!timestamp) return 'Unknown Time'
   const numeric = Number(timestamp)
   const value = numeric < 1e12 ? numeric * 1000 : numeric
   return new Date(value).toLocaleString()
@@ -216,7 +245,7 @@ function resetForm() {
 
 async function submitRequest() {
   if (!form.jobId) {
-    alert('请输入作业 ID')
+    alert('Please enter Job ID')
     return
   }
 
@@ -227,8 +256,8 @@ async function submitRequest() {
     response.value = data.response || ''
     await loadOptimizations()
   } catch (error) {
-    console.error('请求失败:', error)
-    alert(`请求失败: ${error.message}`)
+    console.error('Request failed:', error)
+    alert(`Request failed: ${error.message}`)
   } finally {
     isSubmitting.value = false
   }
@@ -242,20 +271,20 @@ async function loadOptimizations() {
       (a, b) => Number(getCreatedAt(b) || 0) - Number(getCreatedAt(a) || 0)
     )
   } catch (error) {
-    console.error('加载优化建议失败:', error)
+    console.error('Failed to load optimizations:', error)
   } finally {
     loadingOptimizations.value = false
   }
 }
 
 async function removeOptimization(id) {
-  if (!confirm('确定要删除这条优化建议吗？')) return
+  if (!confirm('Are you sure you want to delete this optimization suggestion?')) return
   try {
     await deleteAIOptimization(id)
     await loadOptimizations()
   } catch (error) {
-    console.error('删除失败:', error)
-    alert(`删除失败: ${error.message}`)
+    console.error('Delete failed:', error)
+    alert(`Delete failed: ${error.message}`)
   }
 }
 
@@ -274,344 +303,512 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.hero-ai {
-  position: relative;
-  overflow: hidden;
-}
-
-.hero-ai::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 10% 18%, rgba(125, 211, 252, 0.16), transparent 26%),
-    radial-gradient(circle at 84% 20%, rgba(192, 132, 252, 0.14), transparent 30%);
-  pointer-events: none;
-}
-
-.hero-copy,
-.stats-ai {
-  position: relative;
-  z-index: 1;
-}
-
-.hero-copy {
-  max-width: 760px;
-}
-
-.hero-eyebrow {
-  display: inline-flex;
+.controls {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
   align-items: center;
-  padding: 6px 11px;
-  border-radius: 999px;
-  margin-bottom: 12px;
-  background: rgba(125, 211, 252, 0.10);
-  border: 1px solid rgba(125, 211, 252, 0.16);
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-}
-
-.stats-ai {
-  max-width: 430px;
-}
-
-.controls-ai {
-  align-items: stretch;
-}
-
-.search-box-ai {
-  min-height: 64px;
-}
-
-.search-count {
-  align-self: center;
 }
 
 .control-actions {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
-}
-
-.btn-refresh {
-  min-width: 128px;
 }
 
 .ai-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
-  gap: 18px;
-  margin-bottom: 20px;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 40px;
+  align-items: stretch;
 }
 
 .compose-card,
-.response-card,
-.optimization-card {
-  padding: 22px;
+.response-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 28px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 24px;
 }
 
-.compose-head,
-.optimization-top {
+.compose-head {
   display: flex;
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
-  margin-bottom: 18px;
+  margin-bottom: 24px;
 }
 
-.compose-head h2,
-.optimization-title {
-  margin: 4px 0 0;
-  font-size: 22px;
+.compose-head h2 {
+  margin: 6px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .section-kicker {
-  color: var(--muted);
+  color: var(--accent);
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: .12em;
-  font-weight: 700;
+  letter-spacing: .15em;
+  font-weight: 800;
 }
 
-.compose-badge,
-.timestamp-badge {
-  margin-top: 4px;
+.status-badge-pill {
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  transition: all 0.3s ease;
+}
+
+.status-badge-pill.linked {
+  background: rgba(134, 239, 172, 0.1);
+  color: var(--success);
+  border-color: rgba(134, 239, 172, 0.2);
 }
 
 .compose-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, .8fr);
-  gap: 14px;
-  margin-bottom: 14px;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 20px;
+  margin-bottom: 20px;
 }
 
-.field-textarea {
-  margin-bottom: 16px;
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
-.field textarea {
+.input-wrapper input {
   width: 100%;
-  min-height: 160px;
-  padding: 14px 16px;
+  padding: 12px 16px 12px 40px;
   border-radius: 14px;
   border: 1px solid var(--border);
   background: var(--panel-alt);
   color: var(--text);
   font-size: 14px;
-  line-height: 1.6;
-  resize: vertical;
-  transition:
-    background .22s var(--ease-out),
-    border-color .22s var(--ease-out),
-    color .22s var(--ease-out),
-    box-shadow .22s var(--ease-out);
+  transition: all 0.2s var(--ease-out);
 }
 
-.field textarea:focus {
+.input-wrapper input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(125, 211, 252, 0.12);
+  box-shadow: 0 0 0 4px rgba(125, 211, 252, 0.1);
 }
 
-.field-note__content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 100%;
-  padding: 14px 16px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(125, 211, 252, 0.07), rgba(192, 132, 252, 0.06));
+.input-icon {
+  position: absolute;
+  left: 14px;
+  font-size: 16px;
+  opacity: 0.7;
 }
 
-.note-pill {
-  align-self: flex-start;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: rgba(125, 211, 252, 0.14);
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-
-.note-text {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.compose-actions {
+.status-indicator-box {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  height: 46px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  position: relative;
+}
+
+.status-dot.active {
+  background: var(--success);
+  box-shadow: 0 0 10px var(--success);
+}
+
+.status-dot.active::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid var(--success);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+.status-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.field-textarea textarea {
+  width: 100%;
+  min-height: 180px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+  resize: none;
+  transition: all 0.2s var(--ease-out);
+}
+
+.field-textarea textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--panel);
+}
+
+.compose-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  flex-wrap: wrap;
+}
+
+.submit-btn {
+  width: 100%;
+  padding: 14px;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 14px;
 }
 
 .compose-tip {
   margin: 0;
+  font-size: 12px;
   color: var(--muted);
+  text-align: center;
+}
+
+.response-status {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.response-status.has-data {
+  background: rgba(192, 132, 252, 0.1);
+  color: var(--accent-2);
+}
+
+.response-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.response-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+.response-icon {
+  font-size: 18px;
+}
+
+.response-label {
   font-size: 13px;
-  line-height: 1.6;
-  max-width: 420px;
+  font-weight: 700;
+  color: var(--text);
 }
 
 .response-panel {
-  min-height: 100%;
+  flex: 1;
+  background: var(--panel-alt);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgba(125, 211, 252, 0.06), rgba(255, 255, 255, 0.02));
-  overflow: hidden;
+  border-radius: 18px;
+  overflow-y: auto;
+  position: relative;
 }
 
-.response-panel pre,
-.response-content pre {
+.response-panel pre {
   margin: 0;
-  padding: 18px;
+  padding: 20px;
   white-space: pre-wrap;
   word-break: break-word;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
   color: var(--text);
 }
 
 .response-empty {
-  min-height: 280px;
-  border: 1px dashed var(--border);
-  border-radius: 16px;
+  flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 24px;
+  padding: 40px;
+  border: 2px dashed var(--border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.empty-visual {
+  position: relative;
+  margin-bottom: 24px;
+}
+
+.ai-icon-large {
+  font-size: 48px;
+  z-index: 2;
+  position: relative;
+}
+
+.pulse-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80px;
+  height: 80px;
+  background: radial-gradient(circle, rgba(125, 211, 252, 0.15) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: pulse-large 3s infinite;
+}
+
+@keyframes pulse-large {
+  0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.5; }
+  50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.5; }
+}
+
+.response-empty p {
   color: var(--muted);
-  line-height: 1.7;
-  background: rgba(255, 255, 255, 0.03);
+  font-size: 14px;
+  max-width: 280px;
+  line-height: 1.6;
+}
+
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.section-divider::before,
+.section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
+
+.divider-text {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--muted);
 }
 
 .ai-grid {
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 24px;
+}
+
+.optimization-card {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.optimization-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.opt-id-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.opt-id-block h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.timestamp-badge {
+  align-self: flex-start;
+  margin-top: 4px;
 }
 
 .optimization-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.delete-icon-btn {
+  background: rgba(252, 165, 165, 0.08);
+  border: 1px solid rgba(252, 165, 165, 0.2);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 10px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-icon-btn:hover {
+  background: rgba(252, 165, 165, 0.18);
+  border-color: rgba(252, 165, 165, 0.4);
+  transform: scale(1.05);
 }
 
 .optimization-meta {
-  margin-bottom: 16px;
-}
-
-.optimization-block + .optimization-block {
-  margin-top: 16px;
-}
-
-.block-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
-  margin-bottom: 8px;
+}
+
+.request-block {
+  background: rgba(255, 255, 255, 0.03);
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
 }
 
 .block-label {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .12em;
+  font-size: 10px;
+  font-weight: 800;
   text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 8px;
 }
 
 .optimization-text {
-  margin: 0;
-  color: var(--text);
-  line-height: 1.7;
   font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
 }
 
-.response-content {
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  overflow: hidden;
-  max-height: 180px;
-  background: rgba(255, 255, 255, 0.03);
-  transition: max-height .24s var(--ease-out), border-color .24s var(--ease-out);
-}
-
-.response-content.expanded {
-  max-height: 1200px;
-}
-
-.toggle-btn,
-.delete-btn {
-  border-radius: 10px;
-  cursor: pointer;
+.toggle-btn-modern {
+  background: transparent;
+  border: none;
+  color: var(--accent);
   font-size: 12px;
   font-weight: 700;
-  transition:
-    background .18s var(--ease-out),
-    border-color .18s var(--ease-out),
-    color .18s var(--ease-out),
-    transform .18s var(--ease-out);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.2s;
 }
 
-.toggle-btn {
-  padding: 7px 12px;
+.toggle-btn-modern:hover {
+  background: rgba(125, 211, 252, 0.1);
+}
+
+.arrow {
+  transition: transform 0.3s ease;
+}
+
+.arrow.up {
+  transform: rotate(180deg);
+}
+
+.response-content-modern {
+  position: relative;
+  background: var(--panel-alt);
   border: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted);
+  border-radius: 14px;
+  max-height: 120px;
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.toggle-btn:hover {
-  background: var(--nav-hover);
-  color: var(--text);
+.response-content-modern.expanded {
+  max-height: 1000px;
 }
 
-.delete-btn {
-  padding: 7px 12px;
-  border: 1px solid rgba(252, 165, 165, .26);
-  background: rgba(252, 165, 165, .08);
-  color: var(--danger);
+.response-content-modern pre {
+  margin: 0;
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 
-.delete-btn:hover {
-  background: rgba(252, 165, 165, .14);
-  border-color: rgba(252, 165, 165, .4);
+.fade-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(to bottom, transparent, var(--panel-alt));
+  pointer-events: none;
 }
 
-@media (max-width: 1080px) {
+.spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1100px) {
   .ai-layout {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 600px) {
   .compose-grid {
     grid-template-columns: 1fr;
   }
-
-  .compose-actions,
-  .optimization-top,
-  .block-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .control-actions {
-    width: 100%;
-  }
-
-  .btn-refresh {
-    flex: 1;
+  
+  .ai-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
