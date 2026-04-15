@@ -3,7 +3,7 @@ setlocal
 
 set "ROOT=G:\RGSX\CenterPoint"
 set "JAVA=D:\Program Files\Java\jdk-22\bin\java.exe"
-set "CONFIG=configs\nusc\voxelnet\nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py"
+set "CONFIG=configs\nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py"
 set "CHECKPOINT=work_dirs\epoch_20.pth"
 set "JAR=backend\target\centerpoint-viz-1.0.0.jar"
 set "PORT=8081"

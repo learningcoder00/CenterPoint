@@ -3,10 +3,12 @@ try:
     import spconv.pytorch as spconv 
     from spconv.pytorch import ops
     from spconv.pytorch import SparseConv3d, SubMConv3d
+    from spconv.core import ConvAlgo
 except: 
     import spconv 
     from spconv import ops
     from spconv import SparseConv3d, SubMConv3d
+    from spconv.core import ConvAlgo
 
 from torch import nn
 from torch.nn import functional as F
@@ -32,6 +34,7 @@ def conv3x3(in_planes, out_planes, stride=1, indice_key=None, bias=True):
         padding=1,
         bias=bias,
         indice_key=indice_key,
+        algo=ConvAlgo.Native,
     )
 
 
@@ -45,6 +48,7 @@ def conv1x1(in_planes, out_planes, stride=1, indice_key=None, bias=True):
         padding=1,
         bias=bias,
         indice_key=indice_key,
+        algo=ConvAlgo.Native,
     )
 
 
@@ -110,7 +114,14 @@ class SpMiddleResNetFHD(nn.Module):
 
         # input: # [1600, 1200, 41]
         self.conv_input = spconv.SparseSequential(
-            SubMConv3d(num_input_features, 16, 3, bias=False, indice_key="res0"),
+            SubMConv3d(
+                num_input_features,
+                16,
+                3,
+                bias=False,
+                indice_key="res0",
+                algo=ConvAlgo.Native,
+            ),
             build_norm_layer(norm_cfg, 16)[1],
             nn.ReLU(inplace=True)
         )
@@ -122,7 +133,7 @@ class SpMiddleResNetFHD(nn.Module):
 
         self.conv2 = spconv.SparseSequential(
             SparseConv3d(
-                16, 32, 3, 2, padding=1, bias=False
+                16, 32, 3, 2, padding=1, bias=False, algo=ConvAlgo.Native
             ),  # [1600, 1200, 41] -> [800, 600, 21]
             build_norm_layer(norm_cfg, 32)[1],
             nn.ReLU(inplace=True),
@@ -132,7 +143,7 @@ class SpMiddleResNetFHD(nn.Module):
 
         self.conv3 = spconv.SparseSequential(
             SparseConv3d(
-                32, 64, 3, 2, padding=1, bias=False
+                32, 64, 3, 2, padding=1, bias=False, algo=ConvAlgo.Native
             ),  # [800, 600, 21] -> [400, 300, 11]
             build_norm_layer(norm_cfg, 64)[1],
             nn.ReLU(inplace=True),
@@ -142,7 +153,7 @@ class SpMiddleResNetFHD(nn.Module):
 
         self.conv4 = spconv.SparseSequential(
             SparseConv3d(
-                64, 128, 3, 2, padding=[0, 1, 1], bias=False
+                64, 128, 3, 2, padding=[0, 1, 1], bias=False, algo=ConvAlgo.Native
             ),  # [400, 300, 11] -> [200, 150, 5]
             build_norm_layer(norm_cfg, 128)[1],
             nn.ReLU(inplace=True),
@@ -153,7 +164,7 @@ class SpMiddleResNetFHD(nn.Module):
 
         self.extra_conv = spconv.SparseSequential(
             SparseConv3d(
-                128, 128, (3, 1, 1), (2, 1, 1), bias=False
+                128, 128, (3, 1, 1), (2, 1, 1), bias=False, algo=ConvAlgo.Native
             ),  # [200, 150, 5] -> [200, 150, 2]
             build_norm_layer(norm_cfg, 128)[1],
             nn.ReLU(),

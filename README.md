@@ -165,7 +165,7 @@ Only rebuild when Java source files change.
 
 ```bash
 bash start_server.sh \
-    --config     configs/nusc/voxelnet/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py \
+    --config     configs/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py \
     --checkpoint work_dirs/epoch_20.pth \
     --port       8081
 ```
@@ -192,14 +192,14 @@ Open **http://127.0.0.1:8081/clips** in your browser.
 ```bash
 # Java backend
 java -jar backend/target/centerpoint-viz-1.0.0.jar \
-    --app.config=configs/nusc/voxelnet/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py \
+    --app.config=configs/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py \
     --app.checkpoint=work_dirs/epoch_20.pth \
     --app.project-root=$(pwd) \
     --server.port=8081
 
 # Python fallback backend
 PYTHONPATH=. python tools/server.py \
-    --config     configs/nusc/voxelnet/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py \
+    --config     configs/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py \
     --checkpoint work_dirs/epoch_20.pth \
     --port       8081
 ```
@@ -241,7 +241,7 @@ cd backend && mvn package -DskipTests && cd ..
 
 # 7. Launch
 bash start_server.sh \
-    --config     configs/nusc/voxelnet/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py \
+    --config     configs/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py \
     --checkpoint work_dirs/epoch_20.pth \
     --port       8081
 ```

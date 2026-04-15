@@ -91,7 +91,9 @@ def parse_second_losses(losses):
 
 def batch_processor(model, data, train_mode, **kwargs):
 
-    if "local_rank" in kwargs:
+    if "device" in kwargs and kwargs["device"] is not None:
+        device = torch.device(kwargs["device"])
+    elif "local_rank" in kwargs:
         try:
             device = torch.device(kwargs["local_rank"])
         except RuntimeError:

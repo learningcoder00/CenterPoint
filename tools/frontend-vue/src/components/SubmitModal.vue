@@ -15,7 +15,7 @@
             <span v-if="!hasServerConfig" style="color:var(--danger)">（必填，服务器未配置默认值）</span>
             <span v-else style="color:var(--success)">（可选，留空使用服务器默认）</span>
           </label>
-          <input v-model="configVal" type="text" placeholder="configs/nusc/voxelnet/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py">
+          <input v-model="configVal" type="text" placeholder="configs/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py">
         </div>
         <div class="field">
           <label>Checkpoint 路径

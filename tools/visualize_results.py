@@ -6,7 +6,7 @@ Visualize CenterPoint detection results:
 
 Usage (config + checkpoint, runs inference internally):
     python tools/visualize_results.py \
-        --config configs/nusc/voxelnet/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py \
+        --config configs/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py \
         --checkpoint work_dirs/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z/latest.pth \
         --output-dir vis_output \
         --score-threshold 0.3 \
@@ -363,11 +363,18 @@ def visualize_sample(token, detection, info, data_root, output_dir,
 
 def run_inference(cfg, checkpoint_path, max_samples=-1, tokens=None):
     """Build model, load weights, run inference on val set. Returns (predictions, infos_list)."""
+    if not cfg.test_cfg.get("circular_nms", False):
+        # The local environment lacks the iou3d CUDA extension required by rotate NMS.
+        # Switch to circle NMS to keep inference usable.
+        cfg.test_cfg.circular_nms = True
+        cfg.test_cfg.min_radius = [4, 12, 10, 1, 0.85, 0.175]
+
     model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
     print(f"Loading checkpoint from {checkpoint_path} ...")
     load_checkpoint(model, checkpoint_path, map_location="cpu")
     # Check if CUDA is available
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    force_cpu = os.environ.get("CENTERPOINT_FORCE_CPU", "").lower() in {"1", "true", "yes"}
+    device = torch.device("cpu" if force_cpu or not torch.cuda.is_available() else "cuda")
     model = model.to(device)
     model.eval()
 
@@ -404,7 +411,7 @@ def run_inference(cfg, checkpoint_path, max_samples=-1, tokens=None):
     print(f"Running inference on {total} samples ...")
     for i, data_batch in enumerate(data_loader):
         with torch.no_grad():
-            outputs = batch_processor(model, data_batch, train_mode=False, local_rank=0)
+            outputs = batch_processor(model, data_batch, train_mode=False, device=device)
         for output in outputs:
             token = output["metadata"]["token"]
             for k, v in output.items():

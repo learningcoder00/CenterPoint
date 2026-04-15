@@ -4,7 +4,7 @@ FastAPI server for Clip Visualization System.
 
 Usage:
     python tools/server.py \
-        --config configs/nusc/voxelnet/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py \
+        --config configs/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py \
         --checkpoint work_dirs/epoch_20.pth \
         --port 8081
 """
