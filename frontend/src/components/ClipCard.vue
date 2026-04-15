@@ -85,6 +85,7 @@ const visibleTags = ref([])
 const showOverflowChip = ref(false)
 let resizeObserver = null
 let hoverTimer = null
+let hoverRequestId = 0
 
 const displayTags = computed(() => {
   const tags = props.clip.tags || []
@@ -159,15 +160,24 @@ async function updateVisibleTags() {
 }
 
 async function startHover() {
+  hoverRequestId += 1
+  const requestId = hoverRequestId
   hoverActive.value = true
+  if (hoverTimer) {
+    clearInterval(hoverTimer)
+    hoverTimer = null
+  }
   if (!hoverFrames.value) {
     try {
       const d = await fetchClip(props.clip.clip_id)
+      if (requestId !== hoverRequestId || !hoverActive.value) return
       hoverFrames.value = d.frames || []
     } catch {
+      if (requestId !== hoverRequestId || !hoverActive.value) return
       hoverFrames.value = []
     }
   }
+  if (requestId !== hoverRequestId || !hoverActive.value) return
   if (!hoverFrames.value.length) {
     hoverActive.value = false
     return
@@ -181,6 +191,7 @@ async function startHover() {
 }
 
 function stopHover() {
+  hoverRequestId += 1
   hoverActive.value = false
   if (hoverTimer) {
     clearInterval(hoverTimer)
