@@ -94,8 +94,11 @@
 
         <div v-if="response" class="response-container">
           <div class="response-header-bar">
-            <span class="response-icon">✨</span>
-            <span class="response-label">AI Generated Suggestions</span>
+            <div class="response-header-left">
+              <span class="response-icon">✨</span>
+              <span class="response-label">AI Generated Suggestions</span>
+            </div>
+            <span class="scroll-hint">Scroll to read</span>
           </div>
           <div class="response-panel markdown-body" v-html="renderMarkdownHtml(response)"></div>
         </div>
@@ -249,6 +252,8 @@ async function submitRequest() {
   try {
     const data = await submitAIOptimization(form.jobId, form.description)
     response.value = data.response || ''
+    form.description = ''
+    form.jobId = ''
     await loadOptimizations()
   } catch (error) {
     console.error('Request failed:', error)
@@ -518,9 +523,18 @@ onMounted(() => {
 .response-header-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
   padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.response-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .response-icon {
@@ -535,11 +549,15 @@ onMounted(() => {
 
 .response-panel {
   flex: 1;
+  min-height: 0;
+  max-height: min(46vh, 400px);
   background: var(--panel-alt);
   border: 1px solid var(--border);
   border-radius: 18px;
   overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
+  -webkit-overflow-scrolling: touch;
 }
 
 .response-panel.markdown-body {

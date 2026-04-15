@@ -133,9 +133,9 @@ function cardClick() {
 }
 
 .status-badge.completed {
-  background: rgba(25, 135, 84, 0.14);
-  color: #198754;
-  border: 1px solid rgba(25, 135, 84, 0.24);
+  background: var(--result-done-bg, rgba(255, 241, 118, 0.2));
+  color: var(--result-done, #fff176);
+  border: 1px solid var(--result-done-border, rgba(255, 245, 150, 0.45));
 }
 
 .status-badge.failed {

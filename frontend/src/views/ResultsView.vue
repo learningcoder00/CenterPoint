@@ -1,4 +1,5 @@
 <template>
+  <div class="results-view">
   <section class="hero">
     <div class="hero-content">
       <div class="hero-eyebrow">CenterPoint Visualizer</div>
@@ -8,7 +9,7 @@
     <div class="stats">
       <div class="stat"><span class="label">Total</span><span class="value">{{ stats.total }}</span></div>
       <div class="stat"><span class="label">Running</span><span class="value" style="color:var(--running)">{{ stats.running }}</span></div>
-      <div class="stat"><span class="label">Done</span><span class="value" style="color:var(--success)">{{ stats.done }}</span></div>
+      <div class="stat"><span class="label">Done</span><span class="value" style="color:var(--result-done)">{{ stats.done }}</span></div>
       <div class="stat"><span class="label">Failed</span><span class="value" style="color:var(--danger)">{{ stats.failed }}</span></div>
     </div>
   </section>
@@ -49,6 +50,7 @@
 
   <VideoModal :visible="videoOpen" :job="videoJob" @close="videoOpen = false" />
   <LogModal :visible="logOpen" :job="logJob" @close="logOpen = false" />
+  </div>
 </template>
 
 <script setup>
@@ -142,6 +144,19 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Results-only: bright yellow for completed / “success” (inherits into JobCard) */
+.results-view {
+  --result-done: #fff176;
+  --result-done-bg: rgba(255, 241, 118, 0.2);
+  --result-done-border: rgba(255, 245, 150, 0.45);
+}
+
+:root[data-theme='light'] .results-view {
+  --result-done: #ca8a04;
+  --result-done-bg: rgba(202, 138, 4, 0.14);
+  --result-done-border: rgba(202, 138, 4, 0.32);
+}
+
 .controls {
   display: flex;
   gap: 16px;
