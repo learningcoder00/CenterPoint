@@ -1,5 +1,6 @@
 com/centerpoint/viz/controller/ClipController.class
 com/centerpoint/viz/service/JobService.class
+com/centerpoint/viz/dto/JobAnnotationMarker.class
 com/centerpoint/viz/dto/SubmitJobsRequest.class
 com/centerpoint/viz/repository/TagRepository.class
 com/centerpoint/viz/controller/AIController.class
@@ -9,6 +10,7 @@ com/centerpoint/viz/model/Job.class
 com/centerpoint/viz/config/WebConfig$SymlinkFollowingResourceResolver.class
 com/centerpoint/viz/controller/JobController$LimitedInputStream.class
 com/centerpoint/viz/service/ClipService.class
+com/centerpoint/viz/dto/JobAnnotationResponse.class
 com/centerpoint/viz/controller/ConfigController.class
 com/centerpoint/viz/service/JobExecutor.class
 com/centerpoint/viz/Application.class
@@ -16,6 +18,8 @@ com/centerpoint/viz/repository/JobRepository.class
 com/centerpoint/viz/controller/JobController$RangeResource.class
 com/centerpoint/viz/config/AppProperties.class
 com/centerpoint/viz/controller/JobController.class
+com/centerpoint/viz/dto/JobAnnotationRequest.class
 com/centerpoint/viz/config/WebConfig.class
 com/centerpoint/viz/repository/AIOptimizationRepository.class
+com/centerpoint/viz/repository/JobRepository$1.class
 com/centerpoint/viz/model/AIOptimization.class

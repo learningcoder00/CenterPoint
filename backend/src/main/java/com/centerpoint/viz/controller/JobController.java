@@ -1,6 +1,7 @@
 package com.centerpoint.viz.controller;
 
 import com.centerpoint.viz.config.AppProperties;
+import com.centerpoint.viz.dto.JobAnnotationRequest;
 import com.centerpoint.viz.dto.SubmitJobsRequest;
 import com.centerpoint.viz.model.Job;
 import com.centerpoint.viz.service.JobService;
@@ -73,6 +74,27 @@ public class JobController {
         return jobService.getJob(jobId)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.status(404).build());
+    }
+
+    @GetMapping("/{jobId}/annotations")
+    public ResponseEntity<?> getJobAnnotations(@PathVariable String jobId) {
+        var annotations = jobService.getJobAnnotations(jobId);
+        if (annotations.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("detail", "Job not found"));
+        }
+        return ResponseEntity.ok(annotations.get());
+    }
+
+    @PutMapping("/{jobId}/annotations")
+    public ResponseEntity<?> saveJobAnnotations(
+        @PathVariable String jobId,
+        @RequestBody JobAnnotationRequest body
+    ) {
+        var annotations = jobService.saveJobAnnotations(jobId, body.getNote(), body.getMarkers());
+        if (annotations.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("detail", "Job not found"));
+        }
+        return ResponseEntity.ok(annotations.get());
     }
 
     @DeleteMapping("/{jobId}")

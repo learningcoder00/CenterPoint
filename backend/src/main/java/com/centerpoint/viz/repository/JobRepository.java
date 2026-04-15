@@ -1,12 +1,17 @@
 package com.centerpoint.viz.repository;
 
+import com.centerpoint.viz.dto.JobAnnotationMarker;
+import com.centerpoint.viz.dto.JobAnnotationResponse;
 import com.centerpoint.viz.model.Job;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -15,9 +20,11 @@ import java.util.UUID;
 public class JobRepository {
 
     private final JdbcTemplate jdbc;
+    private final ObjectMapper objectMapper;
 
-    public JobRepository(JdbcTemplate jdbc) {
+    public JobRepository(JdbcTemplate jdbc, ObjectMapper objectMapper) {
         this.jdbc = jdbc;
+        this.objectMapper = objectMapper;
     }
 
     private static final RowMapper<Job> ROW_MAPPER = (rs, rowNum) -> mapRow(rs);
@@ -129,5 +136,71 @@ public class JobRepository {
             "WHERE status IN ('pending', 'running', 'stitching')",
             recoveryNote, now
         );
+    }
+
+    public Optional<JobAnnotationResponse> findAnnotations(String jobId) {
+        List<JobAnnotationResponse> rows = jdbc.query(
+            "SELECT job_id, note, markers_json, created_at, updated_at FROM job_video_annotations WHERE job_id=?",
+            (rs, rowNum) -> mapAnnotations(rs),
+            jobId
+        );
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    public JobAnnotationResponse upsertAnnotations(String jobId, String note, List<JobAnnotationMarker> markers) {
+        double now = System.currentTimeMillis() / 1000.0;
+        String safeNote = note == null ? "" : note;
+        List<JobAnnotationMarker> safeMarkers = markers == null ? new ArrayList<>() : markers;
+        String markersJson = writeMarkersJson(safeMarkers);
+
+        jdbc.update(
+            "INSERT INTO job_video_annotations (job_id, note, markers_json, created_at, updated_at) " +
+            "VALUES (?,?,?,?,?) " +
+            "ON CONFLICT(job_id) DO UPDATE SET note=excluded.note, markers_json=excluded.markers_json, updated_at=excluded.updated_at",
+            jobId, safeNote, markersJson, now, now
+        );
+
+        return findAnnotations(jobId).orElseGet(() -> emptyAnnotations(jobId));
+    }
+
+    public void deleteAnnotations(String jobId) {
+        jdbc.update("DELETE FROM job_video_annotations WHERE job_id=?", jobId);
+    }
+
+    private JobAnnotationResponse mapAnnotations(ResultSet rs) throws SQLException {
+        JobAnnotationResponse response = new JobAnnotationResponse();
+        response.setJobId(rs.getString("job_id"));
+        response.setNote(rs.getString("note"));
+        response.setMarkers(readMarkersJson(rs.getString("markers_json")));
+        response.setCreatedAt(rs.getDouble("created_at"));
+        response.setUpdatedAt(rs.getDouble("updated_at"));
+        return response;
+    }
+
+    private String writeMarkersJson(List<JobAnnotationMarker> markers) {
+        try {
+            return objectMapper.writeValueAsString(markers);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to serialize annotation markers", e);
+        }
+    }
+
+    private List<JobAnnotationMarker> readMarkersJson(String json) {
+        try {
+            if (json == null || json.isBlank()) return new ArrayList<>();
+            return objectMapper.readValue(json, new TypeReference<List<JobAnnotationMarker>>() {});
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to deserialize annotation markers", e);
+        }
+    }
+
+    public JobAnnotationResponse emptyAnnotations(String jobId) {
+        JobAnnotationResponse response = new JobAnnotationResponse();
+        response.setJobId(jobId);
+        response.setNote("");
+        response.setMarkers(new ArrayList<>());
+        response.setCreatedAt(0);
+        response.setUpdatedAt(0);
+        return response;
     }
 }

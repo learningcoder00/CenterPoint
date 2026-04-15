@@ -31,3 +31,14 @@ CREATE TABLE IF NOT EXISTS ai_optimizations (
 
 CREATE INDEX IF NOT EXISTS idx_ai_optimizations_job ON ai_optimizations(job_id);
 CREATE INDEX IF NOT EXISTS idx_ai_optimizations_clip ON ai_optimizations(clip_id);
+
+CREATE TABLE IF NOT EXISTS job_video_annotations (
+    job_id       TEXT PRIMARY KEY,
+    note         TEXT NOT NULL DEFAULT '',
+    markers_json TEXT NOT NULL DEFAULT '[]',
+    created_at   REAL NOT NULL,
+    updated_at   REAL NOT NULL,
+    FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_video_annotations_updated_at ON job_video_annotations(updated_at);

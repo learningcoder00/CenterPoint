@@ -72,6 +72,18 @@ export function videoUrl(jobId) {
   return `${BASE}/api/jobs/${jobId}/video`
 }
 
+export async function fetchJobAnnotations(jobId) {
+  return request(`/api/jobs/${jobId}/annotations`)
+}
+
+export async function saveJobAnnotations(jobId, note, markers) {
+  return request(`/api/jobs/${jobId}/annotations`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note, markers }),
+  })
+}
+
 export function resolveImgSrc(p) {
   if (!p) return ''
   if (p.startsWith('../')) return '/' + p.slice(3)

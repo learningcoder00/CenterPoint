@@ -1,5 +1,6 @@
 package com.centerpoint.viz.controller;
 
+import com.centerpoint.viz.config.AppProperties;
 import com.centerpoint.viz.model.Job;
 import com.centerpoint.viz.repository.JobRepository;
 import com.centerpoint.viz.repository.AIOptimizationRepository;
@@ -12,6 +13,8 @@ import org.springframework.web.bind.annotation.*;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,10 +32,48 @@ public class AIController {
     private static final String UPLOAD_URL = "https://api.siliconflow.cn/v1/files";
     private final JobRepository jobRepository;
     private final AIOptimizationRepository aiOptimizationRepository;
+    private final AppProperties props;
 
-    public AIController(JobRepository jobRepository, AIOptimizationRepository aiOptimizationRepository) {
+    public AIController(JobRepository jobRepository, AIOptimizationRepository aiOptimizationRepository, AppProperties props) {
         this.jobRepository = jobRepository;
         this.aiOptimizationRepository = aiOptimizationRepository;
+        this.props = props;
+    }
+
+    private String buildConfigContext(Optional<Job> jobOptional) {
+        if (jobOptional.isEmpty()) {
+            return "\n当前任务未找到对应作业记录，无法读取配置文件。";
+        }
+
+        Job job = jobOptional.get();
+        String configPath = job.getConfig();
+        if (configPath == null || configPath.isBlank()) {
+            return "\n当前任务没有记录配置文件路径。";
+        }
+
+        StringBuilder context = new StringBuilder();
+        context.append("\n当前任务使用的配置文件路径为: ").append(configPath).append("。");
+
+        try {
+            Path projectRoot = props.projectRootPath();
+            Path resolved = projectRoot.resolve(configPath).normalize();
+            if (!Files.exists(resolved)) {
+                context.append("\n未能读取配置文件内容：文件不存在。");
+                return context.toString();
+            }
+
+            String configText = Files.readString(resolved, StandardCharsets.UTF_8);
+            String trimmed = configText.length() > 12000
+                ? configText.substring(0, 12000) + "\n# ... truncated ..."
+                : configText;
+            context.append("\n下面是配置文件内容，请结合该配置给出更有针对性的建议：\n```python\n")
+                .append(trimmed)
+                .append("\n```");
+        } catch (Exception e) {
+            context.append("\n未能读取配置文件内容：").append(e.getMessage());
+        }
+
+        return context.toString();
     }
 
     // 上传视频文件到SiliconFlow并返回视频URL
@@ -196,7 +237,8 @@ public class AIController {
             
             Map<String, Object> textContent = new HashMap<>();
             textContent.put("type", "text");
-            String text = "你是感知系统专家。分析这段感知回灌系统的输出视频和给出的不足，请给出优化建议。";
+            String text = "你是感知系统专家。当前使用的模型为CenterPoint模型。请分析这段感知回灌系统的输出视频和给出的不足，并给出优化建议。";
+            text += buildConfigContext(jobOptional);
             if (!escapedDescription.isEmpty()) {
                 text += " " + escapedDescription;
             }

@@ -1,5 +1,7 @@
 package com.centerpoint.viz.service;
 
+import com.centerpoint.viz.dto.JobAnnotationMarker;
+import com.centerpoint.viz.dto.JobAnnotationResponse;
 import com.centerpoint.viz.model.Job;
 import com.centerpoint.viz.repository.JobRepository;
 import org.springframework.stereotype.Service;
@@ -7,6 +9,7 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class JobService {
@@ -51,6 +54,31 @@ public class JobService {
         return jobRepo.findById(jobId);
     }
 
+    public Optional<JobAnnotationResponse> getJobAnnotations(String jobId) {
+        if (jobRepo.findById(jobId).isEmpty()) return Optional.empty();
+        return Optional.of(jobRepo.findAnnotations(jobId).orElseGet(() -> jobRepo.emptyAnnotations(jobId)));
+    }
+
+    public Optional<JobAnnotationResponse> saveJobAnnotations(String jobId, String note, List<JobAnnotationMarker> markers) {
+        if (jobRepo.findById(jobId).isEmpty()) return Optional.empty();
+
+        List<JobAnnotationMarker> normalized = (markers == null ? Collections.<JobAnnotationMarker>emptyList() : markers)
+            .stream()
+            .filter(Objects::nonNull)
+            .filter(marker -> marker.getId() != null && !marker.getId().isBlank())
+            .map(marker -> {
+                JobAnnotationMarker copy = new JobAnnotationMarker();
+                copy.setId(marker.getId().trim());
+                copy.setTimeSec(Math.max(0.0, marker.getTimeSec()));
+                copy.setType((marker.getType() == null || marker.getType().isBlank()) ? "bug" : marker.getType().trim());
+                return copy;
+            })
+            .sorted(Comparator.comparingDouble(JobAnnotationMarker::getTimeSec))
+            .collect(Collectors.toList());
+
+        return Optional.of(jobRepo.upsertAnnotations(jobId, note == null ? "" : note, normalized));
+    }
+
     public boolean deleteJob(String jobId, Path jobsDir) throws IOException {
         Optional<Job> jobOpt = jobRepo.findById(jobId);
         if (jobOpt.isEmpty()) return false;
@@ -58,6 +86,7 @@ public class JobService {
         if (Files.exists(jobDir)) {
             deleteRecursively(jobDir);
         }
+        jobRepo.deleteAnnotations(jobId);
         jobRepo.delete(jobId);
         return true;
     }
