@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.io.*;
 import java.nio.file.*;
@@ -35,6 +36,14 @@ public class JobExecutor {
         this.props = props;
         this.jobRepo = jobRepo;
         this.clipService = clipService;
+    }
+
+    @PostConstruct
+    public void recoverInterruptedJobs() {
+        int recovered = jobRepo.failInterruptedJobsOnStartup();
+        if (recovered > 0) {
+            log.warn("Marked {} interrupted jobs as failed during startup recovery", recovered);
+        }
     }
 
     public void submit(String jobId, String config, String checkpoint) {

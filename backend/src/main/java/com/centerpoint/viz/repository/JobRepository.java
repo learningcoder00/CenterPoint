@@ -116,4 +116,18 @@ public class JobRepository {
             log, now, jobId
         );
     }
+
+    public int failInterruptedJobsOnStartup() {
+        double now = System.currentTimeMillis() / 1000.0;
+        String recoveryNote =
+            "\n[recovery] Process interrupted: server restarted while this job was in progress.";
+        return jdbc.update(
+            "UPDATE jobs " +
+            "SET status='failed', " +
+            "    log=COALESCE(log, '') || ?, " +
+            "    updated_at=? " +
+            "WHERE status IN ('pending', 'running', 'stitching')",
+            recoveryNote, now
+        );
+    }
 }

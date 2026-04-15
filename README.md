@@ -1,7 +1,43 @@
 # CenterPoint Clip Visualization Web UI
 
-A full-stack clip preview and annotation tool built on [CenterPoint](https://arxiv.org/abs/2006.11275).  
-Browse nuScenes clips, tag them, and launch BEV+camera visualization jobs directly from the browser.
+A full-stack clip management, visualization, and AI-assisted analysis platform built on [CenterPoint](https://arxiv.org/abs/2006.11275).  
+It helps teams browse nuScenes clips, standardize tag-based review, launch BEV+camera visualization jobs, and turn difficult corner cases into actionable model improvement suggestions.
+
+---
+
+## Why this project exists
+
+In many enterprise perception teams, clip review is not blocked by model capability alone. The bigger challenge is operational:
+
+- interesting clips are scattered across folders, ad-hoc scripts, and personal notes
+- review criteria differ across engineers, making analysis hard to standardize
+- corner cases are discovered, but not turned into a structured improvement loop
+- visualization and diagnosis are often disconnected from model iteration
+
+This project turns that fragmented workflow into a single system:
+
+1. organize raw samples into browsable clips
+2. make clip selection, preview, tagging, and visualization reproducible
+3. track job execution and outputs in one place
+4. use an AI module to summarize failure patterns and suggest model improvements
+
+In practice, the platform tells a simple story:
+
+An enterprise perception team is drowning in clips. Different people remember different failure scenes, but nobody can quickly answer which clips matter, how they were analyzed, or what should be improved next. This system gives the team a shared workspace: clips become searchable assets, visualization becomes a standard job flow, corner cases become traceable evidence, and AI turns raw observations into candidate next steps for the model.
+
+---
+
+## Technology highlights
+
+The platform combines several layers into one workflow:
+
+- `Python + PyTorch + CenterPoint/det3d`: run model inference and generate per-frame visualization assets
+- `ffmpeg`: stitch generated frames into shareable MP4 results
+- `Java 17 + Spring Boot + SQLite`: manage jobs, tags, logs, media serving, and persistence
+- `Vue 3 + Vite`: provide a responsive browser UI for clip search, preview, result review, and AI interaction
+- `AI optimization module`: capture problem descriptions from users and generate structured suggestions for model improvement
+
+Together, these layers connect engineering execution with review and decision-making. The result is not just "run inference", but "find a clip, visualize it, diagnose it, preserve context, and feed insight back into model iteration".
 
 ---
 
