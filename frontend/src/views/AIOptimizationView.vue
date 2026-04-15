@@ -97,9 +97,7 @@
             <span class="response-icon">✨</span>
             <span class="response-label">AI Generated Suggestions</span>
           </div>
-          <div class="response-panel">
-            <pre>{{ response }}</pre>
-          </div>
+          <div class="response-panel markdown-body" v-html="renderMarkdownHtml(response)"></div>
         </div>
         <div v-else class="response-empty">
           <div class="empty-visual">
@@ -129,7 +127,7 @@
       <div class="optimization-top">
         <div class="opt-id-block">
           <div class="section-kicker">Job ID</div>
-          <h2 class="optimization-title">{{ getJobId(opt) || 'Unknown Job' }}</h2>
+          <h2 class="optimization-title" :title="getJobId(opt) || 'Unknown Job'">{{ getJobId(opt) || 'Unknown Job' }}</h2>
           <span class="badge timestamp-badge">{{ formatDate(getCreatedAt(opt)) }}</span>
         </div>
         <div class="optimization-actions">
@@ -158,16 +156,13 @@
       <div class="optimization-block suggestions-block">
         <div class="block-header">
           <span class="block-label">AI Suggestions</span>
-          <button class="toggle-btn-modern" type="button" @click="toggleExpand(opt.id)">
-            {{ expandedOptimizations[opt.id] ? 'Show Less' : 'View Full Analysis' }}
-            <span :class="['arrow', { 'up': expandedOptimizations[opt.id] }]">↓</span>
-          </button>
+          <span class="scroll-hint">Scroll to read more</span>
         </div>
 
-        <div :class="['response-content-modern', { expanded: expandedOptimizations[opt.id] }]">
-          <pre>{{ opt.response }}</pre>
-          <div v-if="!expandedOptimizations[opt.id]" class="fade-overlay"></div>
-        </div>
+        <div
+          class="response-content-modern markdown-body"
+          v-html="renderMarkdownHtml(opt.response)"
+        ></div>
       </div>
     </article>
   </div>
@@ -176,6 +171,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { deleteAIOptimization, fetchAIOptimizations, submitAIOptimization } from '../api.js'
+import { renderMarkdownHtml } from '../markdown.js'
 
 const form = reactive({
   jobId: '',
@@ -186,7 +182,6 @@ const response = ref('')
 const allOptimizations = ref([])
 const loadingOptimizations = ref(false)
 const search = ref('')
-const expandedOptimizations = reactive({})
 
 const stats = computed(() => {
   const total = allOptimizations.value.length
@@ -286,10 +281,6 @@ async function removeOptimization(id) {
     console.error('Delete failed:', error)
     alert(`Delete failed: ${error.message}`)
   }
-}
-
-function toggleExpand(id) {
-  expandedOptimizations[id] = !expandedOptimizations[id]
 }
 
 onMounted(() => {
@@ -550,12 +541,8 @@ onMounted(() => {
   position: relative;
 }
 
-.response-panel pre {
-  margin: 0;
+.response-panel.markdown-body {
   padding: 20px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: inherit;
   font-size: 14px;
   line-height: 1.7;
   color: var(--text);
@@ -634,8 +621,9 @@ onMounted(() => {
 }
 
 .ai-grid {
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 24px;
+  align-items: stretch;
 }
 
 .optimization-card {
@@ -643,6 +631,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  height: 100%;
 }
 
 .optimization-top {
@@ -657,13 +646,17 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  flex: 1;
 }
 
 .opt-id-block h2 {
   margin: 0;
   font-size: 20px;
   font-weight: 700;
-  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .timestamp-badge {
@@ -718,69 +711,129 @@ onMounted(() => {
   margin-bottom: 8px;
 }
 
+.block-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
 .optimization-text {
   font-size: 14px;
   line-height: 1.6;
   margin: 0;
 }
 
-.toggle-btn-modern {
-  background: transparent;
-  border: none;
-  color: var(--accent);
+.scroll-hint {
+  color: var(--muted);
   font-size: 12px;
   font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background 0.2s;
-}
-
-.toggle-btn-modern:hover {
-  background: rgba(125, 211, 252, 0.1);
-}
-
-.arrow {
-  transition: transform 0.3s ease;
-}
-
-.arrow.up {
-  transform: rotate(180deg);
+  white-space: nowrap;
+  margin-top: -1px;
 }
 
 .response-content-modern {
-  position: relative;
   background: var(--panel-alt);
   border: 1px solid var(--border);
   border-radius: 14px;
-  max-height: 120px;
-  overflow: hidden;
-  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  height: 160px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.response-content-modern.expanded {
-  max-height: 1000px;
-}
-
-.response-content-modern pre {
-  margin: 0;
+.response-content-modern.markdown-body {
   padding: 16px;
   font-size: 13px;
-  line-height: 1.6;
-  white-space: pre-wrap;
+  line-height: 1.65;
+  color: var(--text);
 }
 
-.fade-overlay {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 60px;
-  background: linear-gradient(to bottom, transparent, var(--panel-alt));
-  pointer-events: none;
+/* Markdown content inside v-html */
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3),
+.markdown-body :deep(h4) {
+  margin: 1em 0 0.5em;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.35;
+}
+.markdown-body :deep(h1) { font-size: 1.35em; }
+.markdown-body :deep(h2) { font-size: 1.2em; }
+.markdown-body :deep(h3) { font-size: 1.1em; }
+.markdown-body :deep(h4) { font-size: 1.05em; }
+.markdown-body :deep(p) {
+  margin: 0 0 0.85em;
+}
+.markdown-body :deep(p:last-child) {
+  margin-bottom: 0;
+}
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  margin: 0 0 0.85em;
+  padding-left: 1.35em;
+}
+.markdown-body :deep(li) {
+  margin-bottom: 0.35em;
+}
+.markdown-body :deep(strong),
+.markdown-body :deep(b) {
+  font-weight: 700;
+  color: var(--text);
+}
+.markdown-body :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+  padding: 0.15em 0.4em;
+  border-radius: 6px;
+  background: rgba(125, 211, 252, 0.12);
+  border: 1px solid rgba(125, 211, 252, 0.2);
+}
+.markdown-body :deep(pre) {
+  margin: 0 0 0.85em;
+  padding: 12px 14px;
+  border-radius: 10px;
+  overflow-x: auto;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+}
+.markdown-body :deep(pre code) {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+}
+.markdown-body :deep(blockquote) {
+  margin: 0 0 0.85em;
+  padding-left: 12px;
+  border-left: 3px solid rgba(125, 211, 252, 0.45);
+  color: var(--muted);
+}
+.markdown-body :deep(a) {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown-body :deep(hr) {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+.markdown-body :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin: 0 0 0.85em;
+}
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+}
+.markdown-body :deep(th) {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .spinner-small {

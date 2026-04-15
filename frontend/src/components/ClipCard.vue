@@ -54,8 +54,9 @@
         <span class="card-tags-label">Tags</span>
         <span class="card-tags-count">{{ displayTags.length }} tag<span v-if="displayTags.length !== 1">s</span></span>
       </div>
-      <div :class="['tag-list', { empty: !displayTags.length }]">
-        <span v-for="t in displayTags" :key="t" :class="['tag-chip', { 'tag-hit': isTagHit(t) }]">{{ t }}</span>
+      <div ref="tagListRef" :class="['tag-list', { empty: !displayTags.length }]">
+        <span v-for="t in visibleTags" :key="t" :title="t" :class="['tag-chip', { 'tag-hit': isTagHit(t) }]">{{ t }}</span>
+        <span v-if="showOverflowChip" class="tag-chip tag-chip-overflow">...</span>
         <template v-if="!displayTags.length">No tags yet</template>
       </div>
     </div>
@@ -63,7 +64,7 @@
 </template>
 
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { fetchClip, resolveImgSrc } from '../api.js'
 import { fmtDuration, fuzzyScore } from '../utils.js'
 
@@ -79,9 +80,22 @@ defineEmits(['toggle-select', 'preview'])
 const hoverFrames = ref(null)
 const hoverIdx = ref(0)
 const hoverActive = ref(false)
+const tagListRef = ref(null)
+const visibleTags = ref([])
+const showOverflowChip = ref(false)
+let resizeObserver = null
 let hoverTimer = null
 
-const displayTags = computed(() => props.clip.tags || [])
+const displayTags = computed(() => {
+  const tags = props.clip.tags || []
+  const seen = new Set()
+  return tags.filter((tag) => {
+    const key = String(tag || '').trim()
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+})
 const thumbnailSrc = computed(() => resolveImgSrc(props.clip.thumbnail_path))
 const imgSrc = ref(thumbnailSrc.value)
 const hoverLabel = computed(() => hoverFrames.value ? `${hoverIdx.value + 1}/${hoverFrames.value.length}` : '--')
@@ -106,6 +120,42 @@ function isTagHit(t) {
   return (props.searchScope === 'all' || props.searchScope === 'tag') &&
     normalizedQuery.value &&
     includesMatch(t)
+}
+
+function measureChipWidth(text) {
+  const canvas = measureChipWidth.canvas || (measureChipWidth.canvas = document.createElement('canvas'))
+  const ctx = canvas.getContext('2d')
+  ctx.font = '600 11px inherit'
+  return Math.ceil(ctx.measureText(text).width) + 20
+}
+
+async function updateVisibleTags() {
+  await nextTick()
+  const tags = displayTags.value
+  if (!tagListRef.value || !tags.length) {
+    visibleTags.value = tags
+    showOverflowChip.value = false
+    return
+  }
+
+  const availableWidth = tagListRef.value.clientWidth
+  const gap = 8
+  const overflowWidth = measureChipWidth('...')
+  const nextVisible = []
+  let usedWidth = 0
+
+  for (let i = 0; i < tags.length; i++) {
+    const chipWidth = Math.min(measureChipWidth(tags[i]), availableWidth)
+    const prefixGap = nextVisible.length ? gap : 0
+    const remainingCount = tags.length - i - 1
+    const reserveWidth = remainingCount > 0 ? gap + overflowWidth : 0
+    if (usedWidth + prefixGap + chipWidth + reserveWidth > availableWidth) break
+    usedWidth += prefixGap + chipWidth
+    nextVisible.push(tags[i])
+  }
+
+  visibleTags.value = nextVisible
+  showOverflowChip.value = nextVisible.length < tags.length
 }
 
 async function startHover() {
@@ -143,6 +193,10 @@ watch(thumbnailSrc, (v) => {
   if (!hoverActive.value) imgSrc.value = v
 }, { immediate: true })
 
+watch(displayTags, () => {
+  updateVisibleTags()
+}, { immediate: true })
+
 watch(() => props.fps, () => {
   if (!hoverActive.value || !hoverFrames.value?.length) return
   if (hoverTimer) clearInterval(hoverTimer)
@@ -154,6 +208,15 @@ watch(() => props.fps, () => {
 
 onUnmounted(() => {
   if (hoverTimer) clearInterval(hoverTimer)
+  if (resizeObserver) resizeObserver.disconnect()
+})
+
+onMounted(() => {
+  resizeObserver = new ResizeObserver(() => {
+    updateVisibleTags()
+  })
+  if (tagListRef.value) resizeObserver.observe(tagListRef.value)
+  updateVisibleTags()
 })
 </script>
 
@@ -432,6 +495,11 @@ onUnmounted(() => {
 
 .tag-list {
   margin-top: 6px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .tag-list.empty {
@@ -440,6 +508,20 @@ onUnmounted(() => {
   padding: 8px 10px;
   border-radius: 12px;
   background: rgba(125, 211, 252, 0.05);
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+}
+
+.tag-chip-overflow {
+  flex: 0 0 auto;
 }
 
 .tag-chip.tag-hit {

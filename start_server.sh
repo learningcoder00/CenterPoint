@@ -20,7 +20,6 @@ CONFIG="configs/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py"
 CHECKPOINT="work_dirs/epoch_20.pth"
 PORT=8081
 HOST="0.0.0.0"
-BACKEND="java"   # "java" 或 "python"
 
 # ── 解析命令行参数 ─────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -29,14 +28,12 @@ while [[ $# -gt 0 ]]; do
     --checkpoint) CHECKPOINT="$2"; shift 2 ;;
     --port)       PORT="$2";       shift 2 ;;
     --host)       HOST="$2";       shift 2 ;;
-    --backend)    BACKEND="$2";    shift 2 ;;
     -h|--help)
       echo "用法: bash start_server.sh [选项]"
       echo "  --config     <路径>   模型 config 文件（默认: $CONFIG）"
       echo "  --checkpoint <路径>   权重文件（默认: $CHECKPOINT）"
       echo "  --port       <端口>   服务端口（默认: $PORT）"
       echo "  --host       <主机>   绑定主机（默认: $HOST）"
-      echo "  --backend    java|python  使用的后端（默认: java）"
       exit 0 ;;
     *) echo "未知选项: $1"; exit 1 ;;
   esac
@@ -99,25 +96,17 @@ if ! command -v ffmpeg &>/dev/null; then
 fi
 echo -e "  ${GREEN}✓ ffmpeg${NC} $(ffmpeg -version 2>&1 | head -1)"
 
-if [ "$BACKEND" = "java" ]; then
-  if ! command -v java &>/dev/null; then
-    echo -e "${RED}✗ java 未找到，请先安装: apt-get install -y openjdk-17-jdk${NC}"; exit 1
-  fi
-  echo -e "  ${GREEN}✓ Java${NC} $(java -version 2>&1 | head -1)"
-  JAR="$SCRIPT_DIR/backend/target/centerpoint-viz-1.0.0.jar"
-  if [ ! -f "$JAR" ]; then
-    echo -e "${YELLOW}  JAR 不存在，正在构建...${NC}"
-    cd "$SCRIPT_DIR/backend" && mvn package -DskipTests -q && cd "$SCRIPT_DIR"
-    echo -e "  ${GREEN}✓ 构建完成${NC}"
-  fi
-  echo -e "  ${GREEN}✓ Java JAR: $JAR${NC}"
-else
-  "$PYTHON_BIN" -c "import fastapi, uvicorn, aiosqlite" 2>/dev/null || {
-    echo -e "${YELLOW}  安装缺失的 Python 依赖...${NC}"
-    "$PYTHON_BIN" -m pip install fastapi uvicorn aiosqlite -q
-  }
-  echo -e "  ${GREEN}✓ Python 依赖已就绪${NC}"
+if ! command -v java &>/dev/null; then
+  echo -e "${RED}✗ java 未找到，请先安装: apt-get install -y openjdk-17-jdk${NC}"; exit 1
 fi
+echo -e "  ${GREEN}✓ Java${NC} $(java -version 2>&1 | head -1)"
+JAR="$SCRIPT_DIR/backend/target/centerpoint-viz-1.0.0.jar"
+if [ ! -f "$JAR" ]; then
+  echo -e "${YELLOW}  JAR 不存在，正在构建...${NC}"
+  cd "$SCRIPT_DIR/backend" && mvn package -DskipTests -q && cd "$SCRIPT_DIR"
+  echo -e "  ${GREEN}✓ 构建完成${NC}"
+fi
+echo -e "  ${GREEN}✓ Java JAR: $JAR${NC}"
 
 # ── 检查关键文件 ───────────────────────────────────────────────────────────────
 echo -e "\n${YELLOW}[2/4] 检查文件...${NC}"
@@ -169,18 +158,10 @@ echo -e "\n${GREEN}按 Ctrl+C 停止服务${NC}\n"
 
 export PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}"
 
-if [ "$BACKEND" = "java" ]; then
-  exec java -jar "$SCRIPT_DIR/backend/target/centerpoint-viz-1.0.0.jar" \
-    --app.config="$CONFIG" \
-    --app.checkpoint="$CHECKPOINT" \
-    --app.python-executable="$PYTHON_BIN" \
-    --app.project-root="$SCRIPT_DIR" \
-    --server.address="$HOST" \
-    --server.port="$PORT"
-else
-  exec "$PYTHON_BIN" tools/server.py \
-    --config "$CONFIG" \
-    --checkpoint "$CHECKPOINT" \
-    --host "$HOST" \
-    --port "$PORT"
-fi
+exec java -jar "$SCRIPT_DIR/backend/target/centerpoint-viz-1.0.0.jar" \
+  --app.config="$CONFIG" \
+  --app.checkpoint="$CHECKPOINT" \
+  --app.python-executable="$PYTHON_BIN" \
+  --app.project-root="$SCRIPT_DIR" \
+  --server.address="$HOST" \
+  --server.port="$PORT"

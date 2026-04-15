@@ -184,7 +184,6 @@ Open **http://127.0.0.1:8081/clips** in your browser.
 --checkpoint <path>        checkpoint weights (.pth)
 --port       <port>        HTTP port (default: 8081)
 --host       <addr>        bind address (default: 0.0.0.0)
---backend    java|python   server implementation (default: java)
 ```
 
 ### Manual start (without the shell script)
@@ -196,12 +195,6 @@ java -jar backend/target/centerpoint-viz-1.0.0.jar \
     --app.checkpoint=work_dirs/epoch_20.pth \
     --app.project-root=$(pwd) \
     --server.port=8081
-
-# Python fallback backend
-PYTHONPATH=. python tools/server.py \
-    --config     configs/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py \
-    --checkpoint work_dirs/epoch_20.pth \
-    --port       8081
 ```
 
 ---
@@ -258,7 +251,7 @@ CenterPoint/
 │       ├── controller/               # REST API (/api/clips, /api/jobs, /api/config)
 │       ├── service/                  # ClipService, JobService, JobExecutor
 │       └── repository/               # SQLite via JdbcTemplate
-├── configs/nusc/voxelnet/            # model configs
+├── configs/                          # model configs
 ├── det3d/                            # CenterPoint model + dataset code
 ├── frontend/                         # Vue 3 + Vite SPA
 │   └── dist/                         # pre-built frontend (served by backend)
@@ -267,7 +260,6 @@ CenterPoint/
 │   ├── create_nusc_test_infos.py     # generate infos pkl for test split
 │   ├── generate_clip_preview.py      # generate clips_meta.json for the web UI
 │   ├── visualize_results.py          # per-sample BEV + camera visualization
-│   └── server.py                     # Python FastAPI backend (fallback)
 ├── clip_preview/
 │   └── clips_meta.json               # generated clip index
 ├── data/
