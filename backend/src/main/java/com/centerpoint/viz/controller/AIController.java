@@ -132,6 +132,9 @@ public class AIController {
         String descriptionText = description != null ? description : "";
         System.out.println("接收到的jobId: " + jobId);
         System.out.println("接收到的描述: " + descriptionText);
+
+        Optional<Job> jobOptional = jobRepository.findById(jobId);
+        String clipId = jobOptional.map(Job::getClipId).orElse(null);
         
         String response;
         try {
@@ -141,7 +144,6 @@ public class AIController {
             String videoUrl = "https://www.w3schools.com/html/mov_bbb.mp4"; // 公开测试视频URL
             
             // 根据jobId获取真实的视频路径
-            Optional<Job> jobOptional = jobRepository.findById(jobId);
             if (jobOptional.isPresent()) {
                 Job job = jobOptional.get();
                 String mp4Path = job.getMp4Path();
@@ -330,7 +332,7 @@ public class AIController {
         }
         
         // 保存结果到数据库
-        aiOptimizationRepository.create(jobId, descriptionText, response);
+        aiOptimizationRepository.create(jobId, clipId, descriptionText, response);
         
         Map<String, String> result = new HashMap<>();
         result.put("response", response);

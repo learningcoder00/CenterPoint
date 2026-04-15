@@ -12,12 +12,8 @@
         <span class="value">{{ stats.total }}</span>
       </div>
       <div class="stat">
-        <span class="label">Unique Jobs</span>
-        <span class="value">{{ stats.uniqueJobs }}</span>
-      </div>
-      <div class="stat">
-        <span class="label">Latest</span>
-        <span class="value value-small">{{ stats.latest }}</span>
+        <span class="label">Unique Clips</span>
+        <span class="value">{{ stats.uniqueClips }}</span>
       </div>
     </div>
   </section>
@@ -25,7 +21,7 @@
   <section class="controls controls-ai">
     <div class="search-box search-box-ai">
       <span>Filter</span>
-      <input v-model="search" type="text" placeholder="按 job id 或问题描述搜索">
+      <input v-model="search" type="text" placeholder="按 job id、clip id 或问题描述搜索">
       <span v-if="search" class="badge search-count">{{ filteredOptimizations.length }} results</span>
     </div>
 
@@ -104,15 +100,19 @@
       <div class="optimization-top">
         <div>
           <div class="section-kicker">Job</div>
-          <h2 class="optimization-title">{{ opt.jobId }}</h2>
+          <h2 class="optimization-title">{{ getJobId(opt) || '未知作业' }}</h2>
         </div>
         <div class="optimization-actions">
-          <span class="badge timestamp-badge">{{ formatDate(opt.createdAt) }}</span>
+          <span class="badge timestamp-badge">{{ formatDate(getCreatedAt(opt)) }}</span>
           <button class="delete-btn" type="button" @click="removeOptimization(opt.id)">删除</button>
         </div>
       </div>
 
       <div class="meta optimization-meta">
+        <div class="meta-item">
+          <span class="label">Clip ID</span>
+          <span class="value">{{ getClipId(opt) || '未知 clip' }}</span>
+        </div>
         <div class="meta-item">
           <span class="label">Request</span>
           <span class="value">{{ summarizeText(opt.description || '无描述') }}</span>
@@ -161,22 +161,33 @@ const expandedOptimizations = reactive({})
 
 const stats = computed(() => {
   const total = allOptimizations.value.length
-  const uniqueJobs = new Set(allOptimizations.value.map((opt) => opt.jobId).filter(Boolean)).size
-  const latestItem = allOptimizations.value[0]
+  const uniqueClips = new Set(allOptimizations.value.map((opt) => getClipId(opt)).filter(Boolean)).size
   return {
     total: total || '—',
-    uniqueJobs: uniqueJobs || '—',
-    latest: latestItem ? formatDate(latestItem.createdAt) : '—',
+    uniqueClips: uniqueClips || '—',
   }
 })
+
+function getJobId(opt) {
+  return opt?.jobId ?? opt?.job_id ?? ''
+}
+
+function getClipId(opt) {
+  return opt?.clipId ?? opt?.clip_id ?? ''
+}
+
+function getCreatedAt(opt) {
+  return opt?.createdAt ?? opt?.created_at
+}
 
 const filteredOptimizations = computed(() => {
   const q = search.value.trim().toLowerCase()
   if (!q) return allOptimizations.value
   return allOptimizations.value.filter((opt) => {
-    const jobId = (opt.jobId || '').toLowerCase()
+    const jobId = getJobId(opt).toLowerCase()
+    const clipId = getClipId(opt).toLowerCase()
     const description = (opt.description || '').toLowerCase()
-    return jobId.includes(q) || description.includes(q)
+    return jobId.includes(q) || clipId.includes(q) || description.includes(q)
   })
 })
 
@@ -227,7 +238,9 @@ async function loadOptimizations() {
   loadingOptimizations.value = true
   try {
     const data = await fetchAIOptimizations()
-    allOptimizations.value = (data.optimizations || []).slice().sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+    allOptimizations.value = (data.optimizations || []).slice().sort(
+      (a, b) => Number(getCreatedAt(b) || 0) - Number(getCreatedAt(a) || 0)
+    )
   } catch (error) {
     console.error('加载优化建议失败:', error)
   } finally {
@@ -303,11 +316,6 @@ onMounted(() => {
 
 .stats-ai {
   max-width: 430px;
-}
-
-.value-small {
-  font-size: 14px;
-  line-height: 1.4;
 }
 
 .controls-ai {

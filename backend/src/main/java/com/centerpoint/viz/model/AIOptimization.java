@@ -3,6 +3,7 @@ package com.centerpoint.viz.model;
 public class AIOptimization {
     private int id;
     private String jobId;
+    private String clipId;
     private String description;
     private String response;
     private double createdAt;
@@ -21,6 +22,14 @@ public class AIOptimization {
 
     public void setJobId(String jobId) {
         this.jobId = jobId;
+    }
+
+    public String getClipId() {
+        return clipId;
+    }
+
+    public void setClipId(String clipId) {
+        this.clipId = clipId;
     }
 
     public String getDescription() {

@@ -1,11 +1,13 @@
 <template>
   <div class="page-shell">
     <header class="topbar">
-      <nav class="nav" aria-label="Primary">
-        <router-link to="/clips">Clips</router-link>
-        <router-link to="/results">Results</router-link>
-        <router-link to="/ai-optimization">AI 优化</router-link>
-      </nav>
+      <div class="topbar__left">
+        <nav class="nav" aria-label="Primary">
+          <router-link to="/clips">Clips</router-link>
+          <router-link to="/results">Results</router-link>
+          <router-link to="/ai-optimization">AI 优化</router-link>
+        </nav>
+      </div>
 
       <button
         type="button"
@@ -112,6 +114,11 @@ watch(theme, (nextTheme) => {
   gap: 16px;
 }
 
+.topbar__left {
+  display: flex;
+  align-items: center;
+}
+
 .theme-toggle {
   position: relative;
   width: 56px;
@@ -201,6 +208,11 @@ watch(theme, (nextTheme) => {
 
 @media (max-width: 900px) {
   .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .topbar__left {
     align-items: flex-start;
     flex-direction: column;
   }

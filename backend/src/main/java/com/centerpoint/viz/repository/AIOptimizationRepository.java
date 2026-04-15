@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 
 @Repository
 public class AIOptimizationRepository {
@@ -16,6 +17,7 @@ public class AIOptimizationRepository {
 
     public AIOptimizationRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
+        ensureClipIdColumn();
     }
 
     private static final RowMapper<AIOptimization> ROW_MAPPER = (rs, rowNum) -> mapRow(rs);
@@ -24,17 +26,32 @@ public class AIOptimizationRepository {
         AIOptimization ai = new AIOptimization();
         ai.setId(rs.getInt("id"));
         ai.setJobId(rs.getString("job_id"));
+        ai.setClipId(rs.getString("clip_id"));
         ai.setDescription(rs.getString("description"));
         ai.setResponse(rs.getString("response"));
         ai.setCreatedAt(rs.getDouble("created_at"));
         return ai;
     }
 
-    public int create(String jobId, String description, String response) {
+    private void ensureClipIdColumn() {
+        List<Map<String, Object>> columns = jdbc.queryForList("PRAGMA table_info(ai_optimizations)");
+        boolean hasClipId = columns.stream().anyMatch(col -> "clip_id".equals(col.get("name")));
+        if (!hasClipId) {
+            jdbc.execute("ALTER TABLE ai_optimizations ADD COLUMN clip_id TEXT");
+        }
+        jdbc.update(
+            "UPDATE ai_optimizations " +
+            "SET clip_id = (SELECT clip_id FROM jobs WHERE jobs.job_id = ai_optimizations.job_id) " +
+            "WHERE clip_id IS NULL"
+        );
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_ai_optimizations_clip ON ai_optimizations(clip_id)");
+    }
+
+    public int create(String jobId, String clipId, String description, String response) {
         double now = System.currentTimeMillis() / 1000.0;
         return jdbc.update(
-            "INSERT INTO ai_optimizations (job_id, description, response, created_at) VALUES (?,?,?,?)",
-            jobId, description, response, now
+            "INSERT INTO ai_optimizations (job_id, clip_id, description, response, created_at) VALUES (?,?,?,?,?)",
+            jobId, clipId, description, response, now
         );
     }
 

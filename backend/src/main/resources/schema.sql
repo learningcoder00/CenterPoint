@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS tags (
 CREATE TABLE IF NOT EXISTS ai_optimizations (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     job_id     TEXT NOT NULL,
+    clip_id    TEXT,
     description TEXT NOT NULL,
     response    TEXT NOT NULL,
     created_at REAL NOT NULL,
@@ -29,3 +30,4 @@ CREATE TABLE IF NOT EXISTS ai_optimizations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_optimizations_job ON ai_optimizations(job_id);
+CREATE INDEX IF NOT EXISTS idx_ai_optimizations_clip ON ai_optimizations(clip_id);

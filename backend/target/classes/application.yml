@@ -1,0 +1,24 @@
+server:
+  port: 8082
+
+spring:
+  datasource:
+    url: jdbc:sqlite:${app.project-root}/work_dirs/clip_jobs.db
+    driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+  jackson:
+    default-property-inclusion: non_null
+    property-naming-strategy: SNAKE_CASE
+
+app:
+  project-root: /mnt/volumes/ad-perception-al-sh01/linjiawei160/CenterPoint
+  config: ""
+  checkpoint: ""
+  python-executable: python
+  vis-script: tools/visualize_results.py
+  jobs-dir: work_dirs/vis_jobs
+  clips-meta: clip_preview/clips_meta.json
+  vue-dist: tools/frontend-vue/dist
