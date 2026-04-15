@@ -2,14 +2,14 @@
   <Teleport to="body">
     <div v-if="visible" class="modal-backdrop" @click.self="$emit('close')">
       <div class="preview-panel">
-        <div class="preview-col">
+        <div ref="previewColRef" class="preview-col">
           <div class="preview-stage">
-            <img :src="currentSrc" class="preview-img" alt="preview">
+            <img :src="currentSrc" class="preview-img" alt="preview" @load="scheduleMatchSideHeight">
             <div class="stage-badge">Clip Preview</div>
-            <div class="stage-caption">
-              <span>{{ frameLabel }}</span>
-              <span>{{ playing ? 'Playing' : 'Paused' }}</span>
-            </div>
+          </div>
+          <div class="stage-caption" aria-live="polite">
+            <span>{{ frameLabel }}</span>
+            <span>{{ playing ? 'Playing' : 'Paused' }}</span>
           </div>
           <div class="preview-toolbar">
             <div class="toolbar-copy">
@@ -21,12 +21,36 @@
               </div>
             </div>
             <div class="toolbar-actions">
-              <button class="modal-btn" @click="togglePlay">{{ playing ? 'Pause' : 'Play' }}</button>
-              <button class="modal-btn secondary" @click="$emit('close')">Close</button>
+              <div class="frame-nav" role="group" aria-label="Frame navigation">
+                <button
+                  type="button"
+                  class="modal-btn secondary frame-step"
+                  :disabled="!canStepFrames"
+                  title="Previous frame (←)"
+                  @click="prevFrame"
+                >
+                  ← Prev
+                </button>
+                <button
+                  type="button"
+                  class="modal-btn secondary frame-step"
+                  :disabled="!canStepFrames"
+                  title="Next frame (→)"
+                  @click="nextFrame"
+                >
+                  Next →
+                </button>
+              </div>
+              <button type="button" class="modal-btn" @click="togglePlay">{{ playing ? 'Pause' : 'Play' }}</button>
+              <button type="button" class="modal-btn secondary" @click="$emit('close')">Close</button>
             </div>
           </div>
         </div>
-        <div class="side-col">
+        <div
+          class="side-col"
+          :class="{ 'side-col--matched': matchSideHeightPx > 0 }"
+          :style="sideColStyle"
+        >
           <div class="side-card">
             <div class="side-head">
               <div>
@@ -61,7 +85,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onUnmounted } from 'vue'
+import { computed, ref, watch, onUnmounted, nextTick } from 'vue'
 import { fetchClip, fetchTags, saveTags, resolveImgSrc } from '../api.js'
 import { fmtDuration } from '../utils.js'
 
@@ -85,6 +109,106 @@ const frameLabel = computed(() => {
 const tagCount = computed(() =>
   tagText.value.split('\n').map(t => t.trim()).filter(Boolean).length
 )
+
+const canStepFrames = computed(() => frames.value.length > 1)
+
+/** 与左侧 preview-col 等高（桌面宽屏）；窄屏为 0 表示不锁定 */
+const previewColRef = ref(null)
+const matchSideHeightPx = ref(0)
+let previewColResizeObserver = null
+let winResizeTimer = null
+
+function measureMatchSideHeight() {
+  if (!props.visible) {
+    matchSideHeightPx.value = 0
+    return
+  }
+  if (typeof window !== 'undefined' && window.innerWidth <= 900) {
+    matchSideHeightPx.value = 0
+    return
+  }
+  const el = previewColRef.value
+  if (!el) {
+    matchSideHeightPx.value = 0
+    return
+  }
+  matchSideHeightPx.value = Math.round(el.getBoundingClientRect().height)
+}
+
+function scheduleMatchSideHeight() {
+  nextTick(() => {
+    measureMatchSideHeight()
+    requestAnimationFrame(() => measureMatchSideHeight())
+  })
+}
+
+const sideColStyle = computed(() => {
+  if (matchSideHeightPx.value <= 0) return {}
+  return {
+    height: `${matchSideHeightPx.value}px`,
+    boxSizing: 'border-box',
+  }
+})
+
+function teardownPreviewColObserver() {
+  if (previewColResizeObserver) {
+    previewColResizeObserver.disconnect()
+    previewColResizeObserver = null
+  }
+}
+
+function setupPreviewColObserver() {
+  teardownPreviewColObserver()
+  const el = previewColRef.value
+  if (!el || typeof ResizeObserver === 'undefined') return
+  previewColResizeObserver = new ResizeObserver(() => scheduleMatchSideHeight())
+  previewColResizeObserver.observe(el)
+}
+
+function onWindowResizeMatch() {
+  if (winResizeTimer) clearTimeout(winResizeTimer)
+  winResizeTimer = setTimeout(() => scheduleMatchSideHeight(), 80)
+}
+
+function syncCurrentFrameSrc() {
+  if (!frames.value.length) return
+  const path = frames.value[frameIdx.value]?.image_path
+  if (path) currentSrc.value = resolveImgSrc(path)
+}
+
+function pausePlaybackForManualStep() {
+  stopTimer()
+  playing.value = false
+}
+
+function prevFrame() {
+  if (!canStepFrames.value) return
+  pausePlaybackForManualStep()
+  const n = frames.value.length
+  frameIdx.value = (frameIdx.value - 1 + n) % n
+  syncCurrentFrameSrc()
+}
+
+function nextFrame() {
+  if (!canStepFrames.value) return
+  pausePlaybackForManualStep()
+  const n = frames.value.length
+  frameIdx.value = (frameIdx.value + 1) % n
+  syncCurrentFrameSrc()
+}
+
+function onPreviewKeydown(e) {
+  if (!props.visible) return
+  const t = e.target
+  if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) return
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault()
+    prevFrame()
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault()
+    nextFrame()
+  }
+}
 
 function stopTimer() { if (timer) { clearInterval(timer); timer = null } }
 
@@ -122,14 +246,34 @@ watch(() => props.visible, async (v) => {
   playing.value = true
   startPlayTimer()
   document.body.style.overflow = 'hidden'
+  scheduleMatchSideHeight()
 })
 
 watch(() => props.visible, (v) => {
-  if (!v) { stopTimer(); document.body.style.overflow = '' }
+  if (!v) {
+    stopTimer()
+    document.body.style.overflow = ''
+    window.removeEventListener('keydown', onPreviewKeydown)
+    window.removeEventListener('resize', onWindowResizeMatch)
+    teardownPreviewColObserver()
+    matchSideHeightPx.value = 0
+    if (winResizeTimer) {
+      clearTimeout(winResizeTimer)
+      winResizeTimer = null
+    }
+  } else {
+    window.addEventListener('keydown', onPreviewKeydown)
+    window.addEventListener('resize', onWindowResizeMatch)
+    nextTick(() => {
+      setupPreviewColObserver()
+      scheduleMatchSideHeight()
+    })
+  }
 })
 
 watch(() => props.fps, () => {
   if (playing.value) startPlayTimer()
+  scheduleMatchSideHeight()
 })
 
 async function doSaveTags() {
@@ -152,14 +296,59 @@ async function doSaveTags() {
   }
 }
 
-onUnmounted(stopTimer)
+onUnmounted(() => {
+  stopTimer()
+  window.removeEventListener('keydown', onPreviewKeydown)
+  window.removeEventListener('resize', onWindowResizeMatch)
+  teardownPreviewColObserver()
+  if (winResizeTimer) clearTimeout(winResizeTimer)
+})
 </script>
 
 <style scoped>
-.preview-panel { width:min(1100px,100%); max-height:calc(100vh - 48px); overflow:hidden; display:grid; grid-template-columns:1.2fr 1fr; border-radius:20px; border:1px solid var(--border); background:var(--panel); box-shadow:var(--shadow); }
-.preview-col { display:flex; flex-direction:column; background:var(--preview-stage-bg); min-height:0; }
-.preview-stage { position:relative; flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:18px 18px 0; }
-.preview-img { width:100%; flex:1; min-height:320px; object-fit:contain; border-radius:18px; background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01)); }
+/* 使用 flex + align-items:flex-start，避免 Grid 行等高拉伸导致左列底部大块空白 */
+.preview-panel {
+  width:min(1100px,100%);
+  max-height:calc(100vh - 48px);
+  overflow-x:hidden;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:row;
+  align-items:flex-start;
+  border-radius:20px;
+  border:1px solid var(--border);
+  background:var(--panel);
+  box-shadow:var(--shadow);
+}
+.preview-col {
+  flex:1.2 1 0;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  background:var(--preview-stage-bg);
+  min-height:0;
+  justify-content:flex-start;
+}
+/* 不要用 flex:1 撑满整列，否则图片会在区域内垂直居中，与下方进度条之间出现大块空隙 */
+.preview-stage {
+  position:relative;
+  flex:0 0 auto;
+  min-height:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px 18px 0;
+}
+.preview-img {
+  display:block;
+  width:100%;
+  height:auto;
+  max-height:min(52vh, 520px);
+  min-height:0;
+  object-fit:contain;
+  border-radius:18px;
+  background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));
+}
 .stage-badge {
   position:absolute;
   top:18px;
@@ -175,19 +364,19 @@ onUnmounted(stopTimer)
   text-transform:uppercase;
 }
 .stage-caption {
-  position:absolute;
-  left:30px;
-  right:30px;
-  bottom:18px;
+  flex-shrink: 0;
   display:flex;
   justify-content:space-between;
+  align-items:center;
   gap:12px;
+  margin:8px 18px 0;
   padding:10px 14px;
   border-radius:14px;
-  background:linear-gradient(180deg, rgba(8, 12, 24, 0.24), rgba(8, 12, 24, 0.72));
+  background:linear-gradient(180deg, rgba(8, 12, 24, 0.35), rgba(8, 12, 24, 0.85));
   color:#e7eefc;
   font-size:12px;
   font-weight:600;
+  border:1px solid rgba(255,255,255,.06);
 }
 .preview-toolbar {
   display:flex;
@@ -213,7 +402,20 @@ onUnmounted(stopTimer)
   font-size:12px;
   font-weight:600;
 }
-.toolbar-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.toolbar-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.frame-nav {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.modal-btn.frame-step:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+.modal-btn.frame-step:disabled:hover {
+  transform: none;
+}
 .modal-btn {
   border:1px solid var(--preview-button-border);
   border-radius:10px;
@@ -231,12 +433,47 @@ onUnmounted(stopTimer)
 }
 .modal-btn:hover { transform: translateY(-1px); }
 .modal-btn.secondary { background:transparent; color:var(--preview-toolbar-text); }
-.side-col { display:flex; flex-direction:column; padding:18px; overflow-y:auto; border-left:1px solid var(--border); background:linear-gradient(180deg, rgba(255,255,255,.01), rgba(255,255,255,.03)); }
+.side-col {
+  flex:1 1 0;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  padding:18px;
+  overflow-y:auto;
+  border-left:1px solid var(--border);
+  background:linear-gradient(180deg, rgba(255,255,255,.01), rgba(255,255,255,.03));
+}
+/* 与左侧等高时：固定高度、Tags 区内部滚动 */
+.side-col--matched {
+  overflow:hidden;
+  align-self:flex-start;
+}
+.side-col--matched .side-card {
+  flex:1 1 0;
+  min-height:0;
+  height:100%;
+  overflow:hidden;
+}
+.side-col--matched .tags-input {
+  flex:1 1 0;
+  min-height:0;
+  max-height:none;
+  resize:none;
+}
+.side-col--matched .side-head,
+.side-col--matched .meta-grid {
+  flex-shrink:0;
+}
+.side-col--matched .side-actions {
+  margin-top:0;
+  flex-shrink:0;
+}
 .side-card {
   display:flex;
   flex-direction:column;
   gap:14px;
-  height:100%;
+  height:auto;
+  min-height:0;
   padding:18px;
   border-radius:18px;
   border:1px solid rgba(255,255,255,.06);
@@ -287,9 +524,11 @@ onUnmounted(stopTimer)
 }
 .tags-input {
   width:100%;
-  min-height:210px;
+  min-height:96px;
+  max-height:min(26vh, 168px);
   resize:vertical;
-  padding:14px 15px;
+  overflow-y:auto;
+  padding:12px 14px;
   border-radius:14px;
   border:1px solid var(--border);
   background:var(--panel-alt);
@@ -297,6 +536,7 @@ onUnmounted(stopTimer)
   font-family:inherit;
   font-size:13px;
   line-height:1.6;
+  box-sizing:border-box;
 }
 .side-actions { display:flex; flex-direction:column; align-items:flex-start; gap:10px; margin-top:auto; }
 .save-btn { font-size:13px; padding:10px 18px; }
@@ -304,16 +544,25 @@ onUnmounted(stopTimer)
 .status-msg.error { color:var(--danger); }
 .status-msg.ok { color:var(--success); }
 @media (max-width:900px) {
-  .preview-panel { grid-template-columns:1fr; max-height:none; overflow-y:auto; }
-  .side-col { border-left:none; border-top:1px solid var(--border); }
+  .preview-panel {
+    flex-direction:column;
+    align-items:stretch;
+    max-height:none;
+  }
+  .preview-col { flex:1 1 auto; }
+  .side-col {
+    flex:1 1 auto;
+    border-left:none;
+    border-top:1px solid var(--border);
+  }
   .preview-stage { padding:16px 16px 0; }
-  .preview-img { min-height:240px; }
+  .preview-img { max-height:min(42vh, 380px); }
   .preview-toolbar { align-items:flex-start; flex-direction:column; }
   .toolbar-actions { width:100%; }
   .meta-grid { grid-template-columns:1fr; }
   .stage-caption {
-    left:24px;
-    right:24px;
+    margin-left:16px;
+    margin-right:16px;
   }
 }
 </style>

@@ -47,7 +47,7 @@ echo -e "${CYAN}   CenterPoint Clip Visualization Server${NC}"
 echo -e "${CYAN}=====================================================${NC}"
 
 # ── 检查依赖 ──────────────────────────────────────────────────────────────────
-echo -e "\n${YELLOW}[1/4] 检查依赖...${NC}"
+echo -e "\n${YELLOW}[1/5] 检查依赖...${NC}"
 
 if ! command -v python &>/dev/null && ! command -v python3 &>/dev/null; then
   echo -e "${RED}✗ python 未找到${NC}"; exit 1
@@ -108,8 +108,28 @@ if [ ! -f "$JAR" ]; then
 fi
 echo -e "  ${GREEN}✓ Java JAR: $JAR${NC}"
 
+# ── 构建前端（Vite → frontend/dist，供 Spring Boot 静态资源使用）────────────────
+echo -e "\n${YELLOW}[2/5] 构建前端...${NC}"
+if ! command -v node &>/dev/null || ! command -v npm &>/dev/null; then
+  echo -e "${RED}✗ 未找到 node 或 npm，无法构建前端。请安装 Node.js（含 npm）后重试。${NC}"; exit 1
+fi
+echo -e "  ${GREEN}✓ node${NC} $(node --version 2>&1)"
+echo -e "  ${GREEN}✓ npm${NC} $(npm --version 2>&1)"
+FRONTEND_DIR="$SCRIPT_DIR/frontend"
+if [ ! -f "$FRONTEND_DIR/package.json" ]; then
+  echo -e "${RED}✗ 未找到 $FRONTEND_DIR/package.json${NC}"; exit 1
+fi
+cd "$FRONTEND_DIR"
+if [ ! -d node_modules ]; then
+  echo -e "  ${YELLOW}首次运行：正在 npm install...${NC}"
+  npm install
+fi
+npm run build
+cd "$SCRIPT_DIR"
+echo -e "  ${GREEN}✓ 前端已编译: $FRONTEND_DIR/dist${NC}"
+
 # ── 检查关键文件 ───────────────────────────────────────────────────────────────
-echo -e "\n${YELLOW}[2/4] 检查文件...${NC}"
+echo -e "\n${YELLOW}[3/5] 检查文件...${NC}"
 
 MISSING=0
 
@@ -139,7 +159,7 @@ if [ $MISSING -eq 1 ]; then
 fi
 
 # ── 检查端口占用 ───────────────────────────────────────────────────────────────
-echo -e "\n${YELLOW}[3/4] 检查端口 $PORT...${NC}"
+echo -e "\n${YELLOW}[4/5] 检查端口 $PORT...${NC}"
 if lsof -i ":$PORT" &>/dev/null 2>&1; then
   echo -e "  ${YELLOW}⚠ 端口 $PORT 已被占用，尝试自动切换到 $((PORT+1))...${NC}"
   PORT=$((PORT+1))
@@ -150,7 +170,7 @@ fi
 echo -e "  ${GREEN}✓ 端口 $PORT 可用${NC}"
 
 # ── 启动服务 ───────────────────────────────────────────────────────────────────
-echo -e "\n${YELLOW}[4/4] 启动服务...${NC}"
+echo -e "\n${YELLOW}[5/5] 启动服务...${NC}"
 echo -e "  Config:     ${CYAN}$CONFIG${NC}"
 echo -e "  Checkpoint: ${CYAN}$CHECKPOINT${NC}"
 echo -e "  地址:       ${CYAN}http://127.0.0.1:$PORT${NC}"
