@@ -1,89 +1,296 @@
 <template>
   <article :class="['card', { clickable: job.status === 'completed' }]" @click="cardClick">
-    <img class="thumb" loading="lazy" :src="resolveImgSrc(job.thumbnail_path)" :alt="job.clip_id">
-    <span :class="['status-badge', job.status]">
-      <span v-if="isActive" class="spinner"></span>{{ fmtStatus(job.status) }}
-    </span>
-    <div class="progress-wrap">
-      <div class="progress-bar" :style="progressStyle"></div>
+    <div class="card-image">
+      <img class="thumb" loading="lazy" :src="resolveImgSrc(job.thumbnail_path)" :alt="job.clip_id">
+      <div :class="['status-badge', job.status]">{{ fmtStatus(job.status) }}</div>
+      <div v-if="job.status === 'running' || job.status === 'stitching'" class="progress-bar">
+        <div class="progress" :style="{ width: '50%' }"></div>
+      </div>
     </div>
-    <div class="card-body">
+    <div class="card-content">
       <div class="card-header">
-        <h2 class="card-title">{{ job.clip_id }}</h2>
-        <span class="badge">{{ job.frame_count || '—' }} frames</span>
+        <h3 class="clip-id">{{ job.clip_id }}</h3>
+        <div class="job-id">{{ job.job_id }}</div>
       </div>
-      <div class="meta">
-        <div class="meta-item"><span class="label">Status</span><span class="value">{{ fmtStatus(job.status) }}{{ pctText }}</span></div>
-        <div class="meta-item"><span class="label">Created</span><span class="value">{{ fmtTime(job.created_at) }}</span></div>
-        <div class="meta-item" style="grid-column:1/-1"><span class="label">Config</span><span class="value">{{ fmtPath(job.config) }}</span></div>
-        <div class="meta-item" style="grid-column:1/-1"><span class="label">Checkpoint</span><span class="value">{{ fmtPath(job.checkpoint) }}</span></div>
+      <div class="card-meta">
+        <div class="meta-item">
+          <span class="meta-label">Created:</span>
+          <span class="meta-value">{{ formatTime(job.created_at) }}</span>
+        </div>
+        <div class="meta-item" v-if="job.completed_at">
+          <span class="meta-label">Completed:</span>
+          <span class="meta-value">{{ formatTime(job.completed_at) }}</span>
+        </div>
       </div>
-    </div>
-    <div class="card-footer">
-      <span class="log-line" title="点击查看完整日志" @click.stop="$emit('show-log', job)">{{ lastLogLine }}</span>
-      <div class="action-buttons">
-        <button class="ai-btn" @click.stop="goToAIOptimization">AI优化</button>
-        <button class="delete-btn" @click.stop="$emit('delete', job.job_id)">删除</button>
+      <div class="card-actions">
+        <button v-if="job.status === 'completed'" class="action-btn play" @click.stop="$emit('play-video', job)">
+          <span class="btn-icon">▶</span>
+          Play
+        </button>
+        <button class="action-btn log" @click.stop="$emit('show-log', job)">
+          <span class="btn-icon">📋</span>
+          Log
+        </button>
+        <button class="action-btn delete" @click.stop="$emit('delete', job.job_id)">
+          <span class="btn-icon">🗑</span>
+          Delete
+        </button>
       </div>
     </div>
   </article>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { resolveImgSrc } from '../api.js'
-import { fmtStatus, fmtTime, fmtPath } from '../utils.js'
+import { fmtStatus } from '../utils.js'
 
-const props = defineProps({ job: Object })
+const props = defineProps({
+  job: Object
+})
+
 const emit = defineEmits(['play-video', 'show-log', 'delete'])
-const router = useRouter()
 
-const isActive = computed(() => props.job.status === 'running' || props.job.status === 'stitching')
-const pct = computed(() => props.job.total > 0 ? Math.round((props.job.progress / props.job.total) * 100) : 0)
-const pctText = computed(() => props.job.total > 0 ? ` (${pct.value}%)` : '')
-
-const progressStyle = computed(() => {
-  const w = props.job.status === 'completed' ? 100 : pct.value
-  let bg = 'var(--running)'
-  if (props.job.status === 'completed') bg = 'var(--success)'
-  else if (props.job.status === 'failed') bg = 'var(--danger)'
-  return { width: w + '%', background: bg }
-})
-
-const lastLogLine = computed(() => {
-  const lines = (props.job.log || '').trim().split('\n').filter(Boolean)
-  return lines[lines.length - 1] || '—'
-})
-
-function cardClick() {
-  if (props.job.status === 'completed') emit('play-video', props.job)
+function resolveImgSrc(path) {
+  if (!path) return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iIzMzMzMiLz48cGF0aCBkPSJNNzAgMTBsLTU1IDMzIDU1IDMzIDU1LTMzIiBmaWxsPSIjNjY2Ii8+PC9zdmc+'
+  return path
 }
 
-function goToAIOptimization() {
-  router.push(`/ai-optimization?jobId=${encodeURIComponent(props.job.job_id)}`)
+function formatTime(t) {
+  if (!t) return ''
+  return new Date(t).toLocaleString()
+}
+
+function cardClick() {
+  if (props.job.status === 'completed') {
+    emit('play-video', props.job)
+  }
 }
 </script>
 
 <style scoped>
-.card.clickable { cursor:pointer; }
-.thumb { aspect-ratio:16/9; width:100%; object-fit:cover; display:block; background:#0a0d16; }
-.status-badge { position:absolute; top:10px; right:10px; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:700; }
-.status-badge.pending   { background:rgba(253,230,138,.15); color:var(--warning); border:1px solid rgba(253,230,138,.3); }
-.status-badge.running   { background:rgba(147,197,253,.15); color:var(--running); border:1px solid rgba(147,197,253,.3); }
-.status-badge.stitching { background:rgba(192,132,252,.15); color:var(--accent-2); border:1px solid rgba(192,132,252,.3); }
-.status-badge.completed { background:rgba(134,239,172,.15); color:var(--success); border:1px solid rgba(134,239,172,.3); }
-.status-badge.failed    { background:rgba(252,165,165,.15); color:var(--danger); border:1px solid rgba(252,165,165,.3); }
-.progress-wrap { height:3px; background:rgba(255,255,255,.06); }
-.progress-bar  { height:100%; transition:width .3s; }
-.card-body { padding:14px; }
-.card-header { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
-.card-title { margin:0; font-size:16px; }
-.card-footer { padding:0 14px 12px; display:flex; justify-content:space-between; align-items:center; }
-.log-line { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:230px; cursor:pointer; }
-.action-buttons { display:flex; gap:8px; }
-.ai-btn { background:transparent; border:1px solid rgba(147,197,253,.3); color:var(--running); border-radius:8px; padding:4px 10px; font-size:11px; cursor:pointer; }
-.ai-btn:hover { background:rgba(147,197,253,.1); }
-.delete-btn { background:transparent; border:1px solid rgba(252,165,165,.3); color:var(--danger); border-radius:8px; padding:4px 10px; font-size:11px; cursor:pointer; }
-.delete-btn:hover { background:rgba(252,165,165,.1); }
+.card {
+  background: var(--panel);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: all .3s ease;
+  cursor: default;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0,0,0,.2);
+}
+
+.card.clickable {
+  cursor: pointer;
+}
+
+.card-image {
+  position: relative;
+  height: 180px;
+  overflow: hidden;
+  background: var(--background);
+}
+
+.thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform .3s ease;
+}
+
+.card:hover .thumb {
+  transform: scale(1.05);
+}
+
+.status-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  z-index: 1;
+}
+
+.status-badge.pending {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.4);
+}
+
+.status-badge.running {
+  background: rgba(0, 123, 255, 0.2);
+  color: #007bff;
+  border: 1px solid rgba(0, 123, 255, 0.4);
+}
+
+.status-badge.stitching {
+  background: rgba(108, 117, 125, 0.2);
+  color: #6c757d;
+  border: 1px solid rgba(108, 117, 125, 0.4);
+}
+
+.status-badge.completed {
+  background: rgba(25, 135, 84, 0.2);
+  color: #198754;
+  border: 1px solid rgba(25, 135, 84, 0.4);
+}
+
+.status-badge.failed {
+  background: rgba(220, 53, 69, 0.2);
+  color: #dc3545;
+  border: 1px solid rgba(220, 53, 69, 0.4);
+}
+
+.progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: rgba(0,0,0,.2);
+  overflow: hidden;
+}
+
+.progress {
+  height: 100%;
+  background: var(--primary);
+  transition: width .3s ease;
+  animation: progress 2s ease-in-out infinite;
+}
+
+@keyframes progress {
+  0%, 100% { width: 0%; }
+  50% { width: 100%; }
+}
+
+.card-content {
+  padding: 16px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.clip-id {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-id {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: rgba(255,255,255,.05);
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+.card-meta {
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.meta-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.meta-label {
+  color: var(--text-muted);
+}
+
+.meta-value {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .3s ease;
+}
+
+.action-btn:hover {
+  background: rgba(255,255,255,.08);
+  transform: translateY(-1px);
+}
+
+.action-btn.play {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.action-btn.play:hover {
+  background: rgba(59, 130, 246, 0.9);
+}
+
+.action-btn.log {
+  background: rgba(108, 117, 125, 0.2);
+  color: #6c757d;
+  border-color: rgba(108, 117, 125, 0.4);
+}
+
+.action-btn.log:hover {
+  background: rgba(108, 117, 125, 0.3);
+}
+
+.action-btn.delete {
+  background: rgba(220, 53, 69, 0.2);
+  color: #dc3545;
+  border-color: rgba(220, 53, 69, 0.4);
+}
+
+.action-btn.delete:hover {
+  background: rgba(220, 53, 69, 0.3);
+}
+
+.btn-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+@media (max-width: 768px) {
+  .card-actions {
+    flex-direction: column;
+  }
+  
+  .action-btn {
+    width: 100%;
+  }
+}
 </style>
