@@ -9,6 +9,11 @@ found = spconv_spec is not None
 # Always define and register SpMiddleResNetFHD, even without spconv
 if found:
     from .scn import SpMiddleResNetFHD
+    from .scn_v2 import SpMiddleResNetFHDv2
+    try:
+        from .lion_backbone import LIONBackboneCenterPoint
+    except ImportError as exc:
+        print(f"LION backbone disabled: {exc}")
 else:
     print("No spconv, sparse convolution disabled!")
     

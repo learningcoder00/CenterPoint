@@ -280,6 +280,8 @@ class AssignLabel(object):
         self.gaussian_overlap = assigner_cfg.gaussian_overlap
         self._max_objs = assigner_cfg.max_objs
         self._min_radius = assigner_cfg.min_radius
+        self.corner_attention = getattr(assigner_cfg, 'corner_attention', False)
+        self.corner_head = getattr(assigner_cfg, 'corner_head', False)
         self.cfg = assigner_cfg
 
     def __call__(self, res, info):
@@ -353,11 +355,20 @@ class AssignLabel(object):
 
             draw_gaussian = draw_umich_gaussian
 
-            hms, anno_boxs, inds, masks, cats = [], [], [], [], []
+            hms, anno_boxs, inds, masks, cats, gt_boxs = [], [], [], [], [], []
+            corner_hms = []
+            corner_hm_4chs = []
 
             for idx, task in enumerate(self.tasks):
                 hm = np.zeros((len(class_names_by_task[idx]), feature_map_size[1], feature_map_size[0]),
                               dtype=np.float32)
+
+                if self.corner_attention:
+                    corner_hm = np.zeros((len(class_names_by_task[idx]) * 4, feature_map_size[1], feature_map_size[0]), dtype=np.float32)
+
+                # 4-channel class-agnostic corner heatmap for corner_head
+                if self.corner_head:
+                    corner_hm_4ch = np.zeros((4, feature_map_size[1], feature_map_size[0]), dtype=np.float32)
 
                 if res['type'] == 'NuScenesDataset':
                     # [reg, hei, dim, vx, vy, rots, rotc]
@@ -366,6 +377,8 @@ class AssignLabel(object):
                     anno_box = np.zeros((max_objs, 10), dtype=np.float32) 
                 else:
                     raise NotImplementedError("Only Support nuScene for Now!")
+
+                gt_box = np.zeros((max_objs, 7), dtype=np.float32)
 
                 ind = np.zeros((max_objs), dtype=np.int64)
                 mask = np.zeros((max_objs), dtype=np.uint8)
@@ -407,6 +420,11 @@ class AssignLabel(object):
                         ind[new_idx] = y * feature_map_size[0] + x
                         mask[new_idx] = 1
 
+                        if res['type'] == 'NuScenesDataset':
+                            gt_box[new_idx] = gt_dict['gt_boxes'][idx][k][[0, 1, 2, 3, 4, 5, 8]]
+                        elif res['type'] == 'WaymoDataset':
+                            gt_box[new_idx] = gt_dict['gt_boxes'][idx][k][[0, 1, 2, 3, 4, 5, -1]]
+
                         if res['type'] == 'NuScenesDataset': 
                             vx, vy = gt_dict['gt_boxes'][idx][k][6:8]
                             rot = gt_dict['gt_boxes'][idx][k][8]
@@ -422,11 +440,68 @@ class AssignLabel(object):
                         else:
                             raise NotImplementedError("Only Support Waymo and nuScene for Now")
 
+                        # Generate corner heatmap GT: per-class channels for corner_attention
+                        if self.corner_attention:
+                            box = gt_dict['gt_boxes'][idx][k]
+                            bx, by = box[0], box[1]
+                            bw, bl = box[3], box[4]
+                            if res['type'] == 'NuScenesDataset':
+                                brot = box[8]
+                            else:
+                                brot = box[-1]
+                            cos_r = np.cos(brot)
+                            sin_r = np.sin(brot)
+                            hw, hl = bw / 2.0, bl / 2.0
+                            for corner_idx, (dx_s, dy_s) in enumerate([(1, 1), (1, -1), (-1, -1), (-1, 1)]):
+                                cx = bx + hw * dx_s * cos_r - hl * dy_s * sin_r
+                                cy = by + hw * dx_s * sin_r + hl * dy_s * cos_r
+                                cx_feat = (cx - pc_range[0]) / voxel_size[0] / self.out_size_factor
+                                cy_feat = (cy - pc_range[1]) / voxel_size[1] / self.out_size_factor
+                                corner_ct = np.array([cx_feat, cy_feat], dtype=np.float32)
+                                corner_ct_int = corner_ct.astype(np.int32)
+                                if (0 <= corner_ct_int[0] < feature_map_size[0]
+                                        and 0 <= corner_ct_int[1] < feature_map_size[1]):
+                                    draw_gaussian(corner_hm[cls_id * 4 + corner_idx], corner_ct, radius)
+
+                        # Generate 4-channel class-agnostic corner heatmap for corner_head
+                        # Corner order: (-w/2,-l/2), (-w/2,+l/2), (+w/2,+l/2), (+w/2,-l/2)
+                        if self.corner_head:
+                            box = gt_dict['gt_boxes'][idx][k]
+                            bx, by = box[0], box[1]
+                            bw, bl = box[3], box[4]
+                            if res['type'] == 'NuScenesDataset':
+                                brot = box[8]
+                            else:
+                                brot = box[-1]
+                            cos_r, sin_r = np.cos(brot), np.sin(brot)
+                            half_w = bw / voxel_size[0] / self.out_size_factor / 2.0
+                            half_l = bl / voxel_size[1] / self.out_size_factor / 2.0
+                            corners_offset = np.array([
+                                [-half_w, -half_l],
+                                [-half_w,  half_l],
+                                [ half_w,  half_l],
+                                [ half_w, -half_l],
+                            ], dtype=np.float32)
+                            rot_mat = np.array([[cos_r, -sin_r], [sin_r, cos_r]], dtype=np.float32)
+                            corners_rot = corners_offset @ rot_mat.T
+                            corner_radius = max(1, radius // 2)
+                            for ci in range(4):
+                                corner_ct = ct + corners_rot[ci]
+                                corner_ct_int = corner_ct.astype(np.int32)
+                                if (0 <= corner_ct_int[0] < feature_map_size[0] and
+                                        0 <= corner_ct_int[1] < feature_map_size[1]):
+                                    draw_gaussian(corner_hm_4ch[ci], corner_ct, corner_radius)
+
                 hms.append(hm)
                 anno_boxs.append(anno_box)
+                gt_boxs.append(gt_box)
                 masks.append(mask)
                 inds.append(ind)
                 cats.append(cat)
+                if self.corner_attention:
+                    corner_hms.append(corner_hm)
+                if self.corner_head:
+                    corner_hm_4chs.append(corner_hm_4ch)
 
             # used for two stage code 
             boxes = flatten(gt_dict['gt_boxes'])
@@ -449,7 +524,11 @@ class AssignLabel(object):
 
             example.update({'gt_boxes_and_cls': gt_boxes_and_cls})
 
-            example.update({'hm': hms, 'anno_box': anno_boxs, 'ind': inds, 'mask': masks, 'cat': cats})
+            example.update({'hm': hms, 'anno_box': anno_boxs, 'ind': inds, 'mask': masks, 'cat': cats, 'gt_box': gt_boxs})
+            if self.corner_attention:
+                example.update({'corner_hm': corner_hms})
+            if self.corner_head:
+                example.update({'corner_hm_4ch': corner_hm_4chs})
         else:
             pass
 

@@ -9,9 +9,10 @@ import logging
 from collections import defaultdict
 from det3d.core import box_torch_ops
 import torch
+import torch.nn.functional as F
 from det3d.torchie.cnn import kaiming_init
 from torch import double, nn
-from det3d.models.losses.centernet_loss import FastFocalLoss, RegLoss
+from det3d.models.losses.centernet_loss import FastFocalLoss, RegLoss, IouLoss, IouRegLoss
 from det3d.models.utils import Sequential
 from ..registry import HEADS
 import copy 
@@ -21,6 +22,25 @@ except:
     print("Deformable Convolution not built!")
 
 from det3d.core.utils.circle_nms_jit import circle_nms
+
+
+class CornerMSELoss(nn.Module):
+    """
+    MSE loss for corner heatmap supervision, consistent with CenterNet3D.
+    Normalized by the sum of GT heatmap values (avg_factor).
+    When a task has no objects in a batch, avg_factor ~ 0 and loss is skipped
+    to avoid numerical explosion (CenterNet3D on KITTI never hits this case
+    because every frame has cars, but nuScenes multi-task heads can).
+    """
+    def __init__(self):
+        super(CornerMSELoss, self).__init__()
+
+    def forward(self, pred, target):
+        avg_factor = target.sum()
+        if avg_factor < 1.0:
+            return (pred * 0).sum()
+        loss = F.mse_loss(pred, target, reduction='sum')
+        return loss / avg_factor
 
 class FeatureAdaption(nn.Module):
     """Feature Adaption Module.
@@ -179,6 +199,13 @@ class CenterHead(nn.Module):
         share_conv_channel=64,
         num_hm_conv=2,
         dcn_head=False,
+        corner_attention=False,
+        corner_head=False,
+        corner_weight=1.0,
+        keypoint_sensitive=False,
+        reg_iou=None,
+        iou_weight=1.0,
+        reg_iou_weight=2.0,
     ):
         super(CenterHead, self).__init__()
 
@@ -191,8 +218,25 @@ class CenterHead(nn.Module):
         self.in_channels = in_channels
         self.num_classes = num_classes
 
+        self.corner_attention = corner_attention
+        self.corner_head = corner_head
+        self.corner_weight = corner_weight
+        self.keypoint_sensitive = keypoint_sensitive
+
         self.crit = FastFocalLoss()
         self.crit_reg = RegLoss()
+
+        self.use_iou = 'iou' in common_heads
+        self.use_reg_iou = reg_iou is not None
+        self.iou_weight = iou_weight
+        self.reg_iou_weight = reg_iou_weight
+        if self.use_iou:
+            self.crit_iou = IouLoss()
+        if self.use_reg_iou:
+            self.crit_reg_iou = IouRegLoss(reg_iou)
+
+        if corner_attention:
+            self.crit_corner = CornerMSELoss()
 
         self.box_n_dim = 9 if 'vel' in common_heads else 7  
         self.use_direction_classifier = False 
@@ -204,6 +248,14 @@ class CenterHead(nn.Module):
         logger.info(
             f"num_classes: {num_classes}"
         )
+
+        if corner_attention:
+            logger.info("Corner Attention enabled, corner_weight=%.2f, keypoint_sensitive=%s" 
+                        % (corner_weight, keypoint_sensitive))
+
+        if corner_head:
+            logger.info("Corner Head enabled, corner_weight=%.2f  [4-corner BEV offset regression]"
+                        % corner_weight)
 
         # a shared convolution 
         self.shared_conv = nn.Sequential(
@@ -221,8 +273,14 @@ class CenterHead(nn.Module):
 
         for num_cls in num_classes:
             heads = copy.deepcopy(common_heads)
+            if corner_attention:
+                heads.update(dict(corner_hm=(num_cls * 4, num_hm_conv)))
             if not dcn_head:
                 heads.update(dict(hm=(num_cls, num_hm_conv)))
+                if corner_head:
+                    # 4 channels: one gaussian heatmap per BEV corner, class-agnostic
+                    # supervised by focal loss (same as center heatmap)
+                    heads.update(dict(corner=(4, num_hm_conv)))
                 self.tasks.append(
                     SepHead(share_conv_channel, heads, bn=True, init_bias=init_bias, final_kernel=3)
                 )
@@ -246,6 +304,27 @@ class CenterHead(nn.Module):
     def _sigmoid(self, x):
         y = torch.clamp(x.sigmoid_(), min=1e-4, max=1-1e-4)
         return y
+
+    def _corner_focal_loss_single(self, pred, target):
+        """CenterNet focal loss for one corner heatmap channel (B, H, W)."""
+        pos_inds = target.eq(1).float()
+        neg_inds = target.lt(1).float()
+        neg_weights = torch.pow(1 - target, 4)
+        pos_loss = torch.log(pred) * torch.pow(1 - pred, 2) * pos_inds
+        neg_loss = torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
+        num_pos = pos_inds.float().sum()
+        pos_loss = pos_loss.sum()
+        neg_loss = neg_loss.sum()
+        if num_pos == 0:
+            return -neg_loss
+        return -(pos_loss + neg_loss) / num_pos
+
+    def _corner_focal_loss(self, pred, target):
+        """Focal loss over 4 corner heatmap channels, averaged across channels."""
+        assert pred.shape == target.shape
+        losses = [self._corner_focal_loss_single(pred[:, i], target[:, i])
+                  for i in range(pred.size(1))]
+        return torch.stack(losses).mean()
 
     def loss(self, example, preds_dicts, test_cfg, **kwargs):
         rets = []
@@ -277,6 +356,68 @@ class CenterHead(nn.Module):
 
             loss = hm_loss + self.weight*loc_loss
 
+            # Corner attention heatmap loss
+            if self.corner_attention and 'corner_hm' in preds_dict:
+                preds_dict['corner_hm'] = self._sigmoid(preds_dict['corner_hm'])
+                corner_target = example['corner_hm'][task_id]
+                corner_loss = self.crit_corner(preds_dict['corner_hm'], corner_target)
+                loss = loss + self.corner_weight * corner_loss
+                ret.update({'corner_loss': corner_loss.detach().cpu()})
+
+            # Corner head heatmap focal loss
+            # GT is a (4, H, W) class-agnostic gaussian heatmap drawn at the 4 BEV
+            # corners of each object, pre-computed in AssignLabel (corner_hm_4ch).
+            if self.corner_head and 'corner' in preds_dict:
+                preds_dict['corner'] = self._sigmoid(preds_dict['corner'])
+                corner_target = example['corner_hm_4ch'][task_id]
+                corner_loss = self._corner_focal_loss(preds_dict['corner'], corner_target)
+                loss = loss + self.corner_weight * corner_loss
+                ret.update({'corner_loss': corner_loss.detach().cpu()})
+
+            if self.use_iou or self.use_reg_iou:
+                # preds are in (B, C, H, W); slice channel dim explicitly
+                batch_dim = torch.exp(preds_dict['dim'].clamp(min=-1.2, max=3.2))
+                batch_reg = preds_dict['reg']
+                batch_hei = preds_dict['height']
+                batch_rots = preds_dict['rot'][:, 0:1, :, :]
+                batch_rotc = preds_dict['rot'][:, 1:2, :, :]
+                batch_rot = torch.atan2(batch_rots, batch_rotc)
+
+                batch = batch_dim.shape[0]
+                H = preds_dict['hm'].shape[2]
+                W = preds_dict['hm'].shape[3]
+
+                ys, xs = torch.meshgrid([torch.arange(0, H), torch.arange(0, W)])
+                ys = ys.view(1, 1, H, W).repeat(batch, 1, 1, 1).to(batch_dim)
+                xs = xs.view(1, 1, H, W).repeat(batch, 1, 1, 1).to(batch_dim)
+
+                xs = xs + batch_reg[:, 0:1, :, :]
+                ys = ys + batch_reg[:, 1:2, :, :]
+
+                voxel_size = test_cfg.voxel_size
+                pc_range = test_cfg.pc_range
+                out_size_factor = test_cfg.out_size_factor
+                xs = xs * out_size_factor * voxel_size[0] + pc_range[0]
+                ys = ys * out_size_factor * voxel_size[1] + pc_range[1]
+
+                # (B, 7, H, W): [x, y, z, w, l, h, rot]
+                batch_box_preds_bchw = torch.cat([xs, ys, batch_hei, batch_dim, batch_rot], dim=1)
+
+            if self.use_iou:
+                iou_loss = self.crit_iou(
+                    preds_dict['iou'], example['mask'][task_id],
+                    example['ind'][task_id], batch_box_preds_bchw.detach(),
+                    example['gt_box'][task_id])
+                loss = loss + iou_loss * self.iou_weight
+                ret.update({'iou_loss': iou_loss.detach().cpu()})
+
+            if self.use_reg_iou:
+                reg_iou_loss = self.crit_reg_iou(
+                    batch_box_preds_bchw, example['mask'][task_id],
+                    example['ind'][task_id], example['gt_box'][task_id])
+                loss = loss + reg_iou_loss * self.reg_iou_weight
+                ret.update({'reg_iou_loss': reg_iou_loss.detach().cpu()})
+
             ret.update({'loss': loss, 'hm_loss': hm_loss.detach().cpu(), 'loc_loss':loc_loss, 'loc_loss_elem': box_loss.detach().cpu(), 'num_positive': example['mask'][task_id].float().sum()})
 
             rets.append(ret)
@@ -289,6 +430,53 @@ class CenterHead(nn.Module):
                 rets_merged[k].append(v)
 
         return rets_merged
+
+    def _keypoint_sensitive_fusion(self, center_hm, corner_hm, batch_reg, batch_dim, batch_rot, test_cfg):
+        """
+        Fuse corner heatmap with center heatmap using predicted box geometry.
+        Samples corner_hm at predicted corner positions and averages with center_hm.
+        All inputs are in (B, H, W, C) format.
+        """
+        B, H, W, C = center_hm.shape
+
+        voxel_size_x = test_cfg.voxel_size[0]
+        voxel_size_y = test_cfg.voxel_size[1]
+        out_size_factor = test_cfg.out_size_factor
+
+        ys, xs = torch.meshgrid(
+            torch.arange(0, H, device=center_hm.device, dtype=center_hm.dtype),
+            torch.arange(0, W, device=center_hm.device, dtype=center_hm.dtype))
+        xs = xs.view(1, H, W, 1).expand(B, -1, -1, -1)
+        ys = ys.view(1, H, W, 1).expand(B, -1, -1, -1)
+
+        cx = xs + batch_reg[..., 0:1]
+        cy = ys + batch_reg[..., 1:2]
+
+        w_feat = batch_dim[..., 0:1] / voxel_size_x / out_size_factor
+        l_feat = batch_dim[..., 1:2] / voxel_size_y / out_size_factor
+
+        cos_r = torch.cos(batch_rot)
+        sin_r = torch.sin(batch_rot)
+        hw = w_feat / 2
+        hl = l_feat / 2
+
+        corner_grids = []
+        for dx_s, dy_s in [(1, 1), (1, -1), (-1, -1), (-1, 1)]:
+            dx = hw * dx_s
+            dy = hl * dy_s
+            corner_x = (cx + dx * cos_r - dy * sin_r) / (W - 1) * 2 - 1
+            corner_y = (cy + dx * sin_r + dy * cos_r) / (H - 1) * 2 - 1
+            corner_grids.append(torch.cat([corner_x, corner_y], dim=-1))
+
+        grid = torch.stack(corner_grids, dim=3)  # (B, H, W, 4, 2)
+        grid = grid.view(B, H, W * 4, 2).clamp(-1, 1)
+
+        corner_hm_nchw = corner_hm.permute(0, 3, 1, 2).contiguous()
+        sampled = F.grid_sample(corner_hm_nchw, grid, mode='nearest',
+                                padding_mode='zeros', align_corners=True)
+        sampled = sampled.view(B, C, H, W, 4).permute(0, 2, 3, 4, 1).mean(dim=3)
+
+        return (center_hm + sampled) / 2
 
     @torch.no_grad()
     def predict(self, example, preds_dicts, test_cfg, **kwargs):
@@ -343,6 +531,12 @@ class CenterHead(nn.Module):
 
             batch_dim = torch.exp(preds_dict['dim'])
 
+            if self.use_iou and 'iou' in preds_dict:
+                batch_iou = (preds_dict['iou'].squeeze(dim=-1) + 1) * 0.5
+                batch_iou = torch.clamp(batch_iou, min=0, max=1.)
+            else:
+                batch_iou = None
+
             batch_rots = preds_dict['rot'][..., 0:1]
             batch_rotc = preds_dict['rot'][..., 1:2]
             batch_reg = preds_dict['reg']
@@ -350,6 +544,8 @@ class CenterHead(nn.Module):
 
             if double_flip:
                 batch_hm = batch_hm.mean(dim=1)
+                if batch_iou is not None:
+                    batch_iou = batch_iou.mean(dim=1)
                 batch_hei = batch_hei.mean(dim=1)
                 batch_dim = batch_dim.mean(dim=1)
 
@@ -381,6 +577,14 @@ class CenterHead(nn.Module):
 
             batch_rot = torch.atan2(batch_rots, batch_rotc)
 
+            # Keypoint-sensitive fusion: sample corner_hm at predicted corner positions
+            if self.keypoint_sensitive and 'corner_hm' in preds_dict:
+                batch_corner_hm = torch.sigmoid(preds_dict['corner_hm'])
+                if double_flip:
+                    batch_corner_hm = batch_corner_hm.mean(dim=1)
+                batch_hm = self._keypoint_sensitive_fusion(
+                    batch_hm, batch_corner_hm, batch_reg, batch_dim, batch_rot, test_cfg)
+
             batch, H, W, num_cls = batch_hm.size()
 
             batch_reg = batch_reg.reshape(batch, H*W, 2)
@@ -389,6 +593,11 @@ class CenterHead(nn.Module):
             batch_rot = batch_rot.reshape(batch, H*W, 1)
             batch_dim = batch_dim.reshape(batch, H*W, 3)
             batch_hm = batch_hm.reshape(batch, H*W, num_cls)
+
+            if batch_iou is not None:
+                rectifier = test_cfg.get('rectifier', 0.5)
+                batch_iou_flat = batch_iou.reshape(batch, H*W, 1)
+                batch_hm = torch.pow(batch_hm, 1 - rectifier) * torch.pow(batch_iou_flat, rectifier)
 
             ys, xs = torch.meshgrid([torch.arange(0, H), torch.arange(0, W)])
             ys = ys.view(1, H, W).repeat(batch, 1, 1).to(batch_hm)
@@ -434,13 +643,13 @@ class CenterHead(nn.Module):
             ret = {}
             for k in rets[0][i].keys():
                 if k in ["box3d_lidar", "scores"]:
-                    ret[k] = torch.cat([ret[i][k] for ret in rets])
+                    ret[k] = torch.cat([task_rets[i][k] for task_rets in rets])
                 elif k in ["label_preds"]:
                     flag = 0
                     for j, num_class in enumerate(self.num_classes):
                         rets[j][i][k] += flag
                         flag += num_class
-                    ret[k] = torch.cat([ret[i][k] for ret in rets])
+                    ret[k] = torch.cat([task_rets[i][k] for task_rets in rets])
 
             ret['metadata'] = metas[0][i]
             ret_list.append(ret)

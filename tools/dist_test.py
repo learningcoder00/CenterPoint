@@ -60,7 +60,7 @@ def parse_args():
         help="job launcher",
     )
     parser.add_argument("--speed_test", action="store_true")
-    parser.add_argument("--local_rank", type=int, default=0)
+    parser.add_argument("--local_rank", "--local-rank", type=int, default=0)
     parser.add_argument("--testset", action="store_true")
 
     args = parser.parse_args()
@@ -124,7 +124,6 @@ def main():
 
     # put model on gpus
     if distributed:
-        model = apex.parallel.convert_syncbn_model(model)
         model = DistributedDataParallel(
             model.cuda(cfg.local_rank),
             device_ids=[cfg.local_rank],

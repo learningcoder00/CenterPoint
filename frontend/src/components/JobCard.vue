@@ -13,6 +13,14 @@
         <div class="job-id">{{ job.job_id }}</div>
       </div>
       <div class="card-meta">
+        <div class="meta-item meta-path">
+          <span class="meta-label">Config:</span>
+          <span class="meta-value path-value" :title="job.config || 'Not set'">{{ compactPath(job.config) }}</span>
+        </div>
+        <div class="meta-item meta-path">
+          <span class="meta-label">Checkpoint:</span>
+          <span class="meta-value path-value" :title="job.checkpoint || 'Not set'">{{ compactPath(job.checkpoint) }}</span>
+        </div>
         <div class="meta-item">
           <span class="meta-label">Created:</span>
           <span class="meta-value">{{ fmtTime(job.created_at) }}</span>
@@ -58,6 +66,13 @@ function cardClick() {
   if (props.job.status === 'completed') {
     emit('play-video', props.job)
   }
+}
+
+function compactPath(path) {
+  if (!path) return 'Not set'
+  const parts = path.split('/')
+  if (parts.length <= 2) return path
+  return `${parts[0]}/…/${parts[parts.length - 1]}`
 }
 </script>
 
@@ -209,6 +224,7 @@ function cardClick() {
   display: flex;
   justify-content: space-between;
   margin-bottom: 6px;
+  gap: 10px;
 }
 
 .meta-label {
@@ -218,6 +234,21 @@ function cardClick() {
 .meta-value {
   color: var(--text);
   font-weight: 600;
+}
+
+.meta-path {
+  align-items: flex-start;
+}
+
+.path-value {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  color: var(--accent);
 }
 
 .card-actions {

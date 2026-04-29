@@ -14,7 +14,7 @@ spring:
     property-naming-strategy: SNAKE_CASE
 
 app:
-  project-root: /mnt/volumes/ad-perception-al-sh01/linjiawei160/CenterPoint
+  project-root: /mnt/volumes/ad-perception-al-sh01/linjiawei160/class/CenterPoint
   config: ""
   checkpoint: ""
   python-executable: python

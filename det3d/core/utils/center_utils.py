@@ -89,6 +89,72 @@ def _circle_nms(boxes, min_radius, post_max_size=83):
     return keep 
 
 
+def _bboxes_to_corners2d(center, dim):
+    corners_norm = torch.tensor([[-0.5, -0.5], [-0.5, 0.5], [0.5, 0.5], [0.5, -0.5]],
+                                dtype=torch.float32, device=dim.device)
+    corners = dim.view([-1, 1, 2]) * corners_norm.view([1, 4, 2])
+    corners = corners + center.view(-1, 1, 2)
+    return corners
+
+
+def bbox3d_overlaps_iou(pred_boxes, gt_boxes):
+    assert pred_boxes.shape[0] == gt_boxes.shape[0]
+
+    qcorners = _bboxes_to_corners2d(pred_boxes[:, :2], pred_boxes[:, 3:5])
+    gcorners = _bboxes_to_corners2d(gt_boxes[:, :2], gt_boxes[:, 3:5])
+
+    inter_max_xy = torch.minimum(qcorners[:, 2], gcorners[:, 2])
+    inter_min_xy = torch.maximum(qcorners[:, 0], gcorners[:, 0])
+
+    volume_pred_boxes = pred_boxes[:, 3] * pred_boxes[:, 4] * pred_boxes[:, 5]
+    volume_gt_boxes = gt_boxes[:, 3] * gt_boxes[:, 4] * gt_boxes[:, 5]
+
+    inter_h = torch.minimum(gt_boxes[:, 2] + 0.5 * gt_boxes[:, 5], pred_boxes[:, 2] + 0.5 * pred_boxes[:, 5]) - \
+              torch.maximum(gt_boxes[:, 2] - 0.5 * gt_boxes[:, 5], pred_boxes[:, 2] - 0.5 * pred_boxes[:, 5])
+    inter_h = torch.clamp(inter_h, min=0)
+
+    inter = torch.clamp((inter_max_xy - inter_min_xy), min=0)
+    volume_inter = inter[:, 0] * inter[:, 1] * inter_h
+    volume_union = volume_gt_boxes + volume_pred_boxes - volume_inter
+
+    ious = volume_inter / volume_union
+    ious = torch.clamp(ious, min=0, max=1.0)
+    return ious
+
+
+def bbox3d_overlaps_giou(pred_boxes, gt_boxes):
+    assert pred_boxes.shape[0] == gt_boxes.shape[0]
+
+    qcorners = _bboxes_to_corners2d(pred_boxes[:, :2], pred_boxes[:, 3:5])
+    gcorners = _bboxes_to_corners2d(gt_boxes[:, :2], gt_boxes[:, 3:5])
+
+    inter_max_xy = torch.minimum(qcorners[:, 2], gcorners[:, 2])
+    inter_min_xy = torch.maximum(qcorners[:, 0], gcorners[:, 0])
+    out_max_xy = torch.maximum(qcorners[:, 2], gcorners[:, 2])
+    out_min_xy = torch.minimum(qcorners[:, 0], gcorners[:, 0])
+
+    volume_pred_boxes = pred_boxes[:, 3] * pred_boxes[:, 4] * pred_boxes[:, 5]
+    volume_gt_boxes = gt_boxes[:, 3] * gt_boxes[:, 4] * gt_boxes[:, 5]
+
+    inter_h = torch.minimum(gt_boxes[:, 2] + 0.5 * gt_boxes[:, 5], pred_boxes[:, 2] + 0.5 * pred_boxes[:, 5]) - \
+              torch.maximum(gt_boxes[:, 2] - 0.5 * gt_boxes[:, 5], pred_boxes[:, 2] - 0.5 * pred_boxes[:, 5])
+    inter_h = torch.clamp(inter_h, min=0)
+
+    inter = torch.clamp((inter_max_xy - inter_min_xy), min=0)
+    volume_inter = inter[:, 0] * inter[:, 1] * inter_h
+    volume_union = volume_gt_boxes + volume_pred_boxes - volume_inter
+
+    outer_h = torch.maximum(gt_boxes[:, 2] + 0.5 * gt_boxes[:, 5], pred_boxes[:, 2] + 0.5 * pred_boxes[:, 5]) - \
+              torch.minimum(gt_boxes[:, 2] - 0.5 * gt_boxes[:, 5], pred_boxes[:, 2] - 0.5 * pred_boxes[:, 5])
+    outer_h = torch.clamp(outer_h, min=0)
+    outer = torch.clamp((out_max_xy - out_min_xy), min=0)
+    closure = outer[:, 0] * outer[:, 1] * outer_h
+
+    gious = volume_inter / volume_union - (closure - volume_union) / closure
+    gious = torch.clamp(gious, min=-1.0, max=1.0)
+    return gious
+
+
 def bilinear_interpolate_torch(im, x, y):
     """
     Args:

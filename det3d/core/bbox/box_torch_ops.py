@@ -262,23 +262,18 @@ def rotate_nms_pcdet(boxes, scores, thresh, pre_maxsize=None, post_max_size=None
 
     boxes = boxes[order].contiguous()
 
-    keep = torch.LongTensor(boxes.size(0))
-
     if len(boxes) == 0:
-        num_out =0
+        selected = order[:0]
     else:
         try:
             import det3d.ops.iou3d_nms.iou3d_nms_cuda as iou3d_nms_cuda
+            keep = torch.LongTensor(boxes.size(0))
             num_out = iou3d_nms_cuda.nms_gpu(boxes, keep, thresh)
+            selected = order[keep[:num_out].to(order.device)].contiguous()
         except (ImportError, RuntimeError):
-            # Fallback to CPU implementation
-            num_out = len(boxes)
-
-    # Check if CUDA is available
-    if torch.cuda.is_available():
-        selected = order[keep[:num_out].cuda()].contiguous()
-    else:
-        selected = order[keep[:num_out]].contiguous()
+            # Without the CUDA extension we cannot compute rotated IoU here.
+            # Preserve score ordering so inference can still run as a smoke-test fallback.
+            selected = order.contiguous()
 
     if post_max_size is not None:
         selected = selected[:post_max_size]

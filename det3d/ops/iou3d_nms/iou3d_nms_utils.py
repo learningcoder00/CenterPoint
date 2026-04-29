@@ -83,6 +83,47 @@ def boxes_iou3d_gpu(boxes_a, boxes_b):
     return iou3d
 
 
+def boxes_aligned_iou3d_gpu(boxes_a, boxes_b):
+    """
+    Compute 3D IoU for N aligned pairs using rotated BEV overlap.
+    Args:
+        boxes_a: (N, 7) [x, y, z, dx, dy, dz, heading]
+        boxes_b: (N, 7) [x, y, z, dx, dy, dz, heading]
+    Returns:
+        iou3d: (N,)
+    """
+    assert boxes_a.shape[0] == boxes_b.shape[0]
+    assert boxes_a.shape[1] == boxes_b.shape[1] == 7
+    N = boxes_a.shape[0]
+    if N == 0:
+        return boxes_a.new_zeros((0,))
+
+    boxes_a = to_pcdet(boxes_a)
+    boxes_b = to_pcdet(boxes_b)
+
+    boxes_a_height_max = boxes_a[:, 2] + boxes_a[:, 5] / 2
+    boxes_a_height_min = boxes_a[:, 2] - boxes_a[:, 5] / 2
+    boxes_b_height_max = boxes_b[:, 2] + boxes_b[:, 5] / 2
+    boxes_b_height_min = boxes_b[:, 2] - boxes_b[:, 5] / 2
+
+    overlaps_bev = torch.cuda.FloatTensor(torch.Size((N, N))).zero_()
+    iou3d_nms_cuda.boxes_overlap_bev_gpu(
+        boxes_a.contiguous(), boxes_b.contiguous(), overlaps_bev)
+    overlaps_bev = torch.diag(overlaps_bev)
+
+    max_of_min = torch.max(boxes_a_height_min, boxes_b_height_min)
+    min_of_max = torch.min(boxes_a_height_max, boxes_b_height_max)
+    overlaps_h = torch.clamp(min_of_max - max_of_min, min=0)
+
+    overlaps_3d = overlaps_bev * overlaps_h
+
+    vol_a = boxes_a[:, 3] * boxes_a[:, 4] * boxes_a[:, 5]
+    vol_b = boxes_b[:, 3] * boxes_b[:, 4] * boxes_b[:, 5]
+
+    iou3d = overlaps_3d / torch.clamp(vol_a + vol_b - overlaps_3d, min=1e-6)
+    return iou3d
+
+
 def nms_gpu(boxes, scores, thresh, pre_maxsize=None, **kwargs):
     """
     :param boxes: (N, 7) [x, y, z, dx, dy, dz, heading]

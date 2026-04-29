@@ -47,7 +47,7 @@ def parse_args():
         default="pytorch",
         help="job launcher",
     )
-    parser.add_argument("--local_rank", type=int, default=0)
+    parser.add_argument("--local_rank", "--local-rank", type=int, default=0)
     parser.add_argument(
         "--autoscale-lr",
         action="store_true",
@@ -83,9 +83,10 @@ def main():
 
     if distributed:
         if args.launcher == "pytorch":
-            torch.cuda.set_device(args.local_rank)
+            local_rank = int(os.environ.get("LOCAL_RANK", args.local_rank))
+            torch.cuda.set_device(local_rank)
             torch.distributed.init_process_group(backend="nccl", init_method="env://")
-            cfg.local_rank = args.local_rank
+            cfg.local_rank = local_rank
         elif args.launcher == "slurm":
             proc_id = int(os.environ["SLURM_PROCID"])
             ntasks = int(os.environ["SLURM_NTASKS"])

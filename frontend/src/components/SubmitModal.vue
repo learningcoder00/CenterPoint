@@ -3,26 +3,54 @@
     <div v-if="visible" class="modal-backdrop" @click.self="$emit('close')">
       <div class="submit-panel">
         <h2>Submit visualization job</h2>
-        <p class="hint">Runs inference on the selected clips and produces MP4 videos. When jobs finish, open the Results page to view them.</p>
+        <p class="hint">Runs inference on the selected clips and produces MP4 videos. Please choose the model config and checkpoint for this job.</p>
         <div class="chip-list">
           <span v-for="id in clipIds" :key="id" class="chip">{{ id }}</span>
         </div>
 
-        <div class="server-info" v-html="serverInfoHtml"></div>
-
         <div class="field">
-          <label>Config path
-            <span v-if="!hasServerConfig" style="color:var(--danger)">(required — no server default)</span>
-            <span v-else style="color:var(--success)">(optional — leave blank to use server default)</span>
+          <label>
+            Config file <span class="required">(required)</span>
           </label>
-          <input v-model="configVal" type="text" placeholder="configs/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py">
+          <div class="select-shell">
+            <select v-model="selectedConfig" @change="applySelectedConfig">
+              <option value="" disabled>Select a config from configs/</option>
+              <option v-for="path in configOptions" :key="path" :value="path">
+                {{ displayPath(path) }}
+              </option>
+            </select>
+          </div>
+          <input
+            v-model="configVal"
+            type="text"
+            placeholder="configs/final.py"
+            @input="syncSelectedConfig"
+          >
+          <span class="option-hint">
+            {{ configOptions.length }} config option(s) found. The typed path will be submitted.
+          </span>
         </div>
         <div class="field">
-          <label>Checkpoint path
-            <span v-if="!hasServerCkpt" style="color:var(--danger)">(required — no server default)</span>
-            <span v-else style="color:var(--success)">(optional — leave blank to use server default)</span>
+          <label>
+            Checkpoint file <span class="required">(required)</span>
           </label>
-          <input v-model="ckptVal" type="text" placeholder="work_dirs/epoch_20.pth">
+          <div class="select-shell">
+            <select v-model="selectedCheckpoint" @change="applySelectedCheckpoint">
+              <option value="" disabled>Select a checkpoint from project folders</option>
+              <option v-for="path in checkpointOptions" :key="path" :value="path">
+                {{ displayPath(path) }}
+              </option>
+            </select>
+          </div>
+          <input
+            v-model="ckptVal"
+            type="text"
+            placeholder="work_dirs/final/epoch_20.pth"
+            @input="syncSelectedCheckpoint"
+          >
+          <span class="option-hint">
+            {{ checkpointOptions.length }} checkpoint option(s) found under work_dirs/, checkpoints/, and weights/.
+          </span>
         </div>
         <p :class="['status-msg', statusType]">{{ statusMsg }}</p>
         <div class="submit-actions">
@@ -49,39 +77,57 @@ const router = useRouter()
 
 const configVal = ref('')
 const ckptVal = ref('')
+const selectedConfig = ref('')
+const selectedCheckpoint = ref('')
 const statusMsg = ref('')
 const statusType = ref('')
 const submitting = ref(false)
 
-const hasServerConfig = computed(() => !!(props.serverConfig.config && props.serverConfig.config.trim()))
-const hasServerCkpt = computed(() => !!(props.serverConfig.checkpoint && props.serverConfig.checkpoint.trim()))
-
-const serverInfoHtml = computed(() => {
-  const c = props.serverConfig.config || 'not set'
-  const k = props.serverConfig.checkpoint || 'not set'
-  const cColor = hasServerConfig.value ? 'var(--success)' : 'var(--danger)'
-  const kColor = hasServerCkpt.value ? 'var(--success)' : 'var(--danger)'
-  let html = `<b style="color:var(--accent)">Server defaults</b><br>Config: <code style="color:${cColor}">${c}</code><br>Checkpoint: <code style="color:${kColor}">${k}</code>`
-  if (!hasServerConfig.value || !hasServerCkpt.value) {
-    html += `<br><span style="color:var(--warning);font-size:11px;">⚠ No server default for one or both paths — fill in below, or restart the server with --config and --checkpoint.</span>`
-  }
-  return html
-})
+const configOptions = computed(() => props.serverConfig.configs || [])
+const checkpointOptions = computed(() => props.serverConfig.checkpoints || [])
 
 watch(() => props.visible, (v) => {
   if (v) {
-    configVal.value = props.serverConfig.config || ''
-    ckptVal.value = props.serverConfig.checkpoint || ''
+    selectedConfig.value = ''
+    selectedCheckpoint.value = ''
+    configVal.value = ''
+    ckptVal.value = ''
     statusMsg.value = ''
     statusType.value = ''
   }
 })
 
+function displayPath(path) {
+  const parts = path.split('/')
+  const name = parts[parts.length - 1]
+  return parts.length > 1 ? `${name} — ${path}` : path
+}
+
+function applySelectedConfig() {
+  configVal.value = selectedConfig.value
+}
+
+function applySelectedCheckpoint() {
+  ckptVal.value = selectedCheckpoint.value
+}
+
+function syncSelectedConfig() {
+  selectedConfig.value = configOptions.value.includes(configVal.value.trim())
+    ? configVal.value.trim()
+    : ''
+}
+
+function syncSelectedCheckpoint() {
+  selectedCheckpoint.value = checkpointOptions.value.includes(ckptVal.value.trim())
+    ? ckptVal.value.trim()
+    : ''
+}
+
 async function doSubmit() {
-  const effectiveConfig = configVal.value.trim() || props.serverConfig.config || ''
-  const effectiveCkpt = ckptVal.value.trim() || props.serverConfig.checkpoint || ''
-  if (!effectiveConfig) { statusMsg.value = 'Config path is required'; statusType.value = 'error'; return }
-  if (!effectiveCkpt) { statusMsg.value = 'Checkpoint path is required'; statusType.value = 'error'; return }
+  const effectiveConfig = configVal.value.trim()
+  const effectiveCkpt = ckptVal.value.trim()
+  if (!effectiveConfig) { statusMsg.value = 'Please choose or enter a config file path.'; statusType.value = 'error'; return }
+  if (!effectiveCkpt) { statusMsg.value = 'Please choose or enter a checkpoint file path.'; statusType.value = 'error'; return }
 
   submitting.value = true
   statusMsg.value = 'Submitting…'
@@ -89,8 +135,8 @@ async function doSubmit() {
   try {
     const data = await submitJobs(
       props.clipIds,
-      configVal.value.trim() || undefined,
-      ckptVal.value.trim() || undefined,
+      effectiveConfig,
+      effectiveCkpt,
     )
     statusMsg.value = `Submitted ${data.jobs.length} job(s). Redirecting to Results…`
     statusType.value = 'ok'
@@ -106,12 +152,18 @@ async function doSubmit() {
 </script>
 
 <style scoped>
-.submit-panel { width:min(540px,100%); border-radius:20px; border:1px solid var(--border); background:var(--panel); padding:28px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:16px; }
+.submit-panel { width:min(620px,100%); border-radius:20px; border:1px solid var(--border); background:var(--panel); padding:28px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:16px; }
 .submit-panel h2 { margin:0; font-size:20px; }
 .hint { margin:0; color:var(--muted); font-size:13px; line-height:1.6; }
 .chip-list { display:flex; flex-wrap:wrap; gap:6px; }
 .chip { padding:5px 11px; border-radius:999px; font-size:12px; font-weight:600; background:rgba(125,211,252,.14); color:var(--accent); border:1px solid rgba(125,211,252,.3); }
-.server-info { padding:10px 14px; border-radius:10px; font-size:12px; line-height:1.7; border:1px solid var(--border); background:var(--panel-alt); }
+.required { color:var(--danger); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+.select-shell { position:relative; }
+.select-shell::after { content:'▾'; position:absolute; right:13px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none; font-size:12px; }
+.select-shell select { width:100%; min-height:40px; border-radius:10px; border:1px solid var(--border); background:var(--panel-alt); color:var(--text); padding:0 36px 0 12px; outline:none; appearance:none; font-size:12px; }
+.select-shell select:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(125,211,252,.12); }
+.field input { margin-top:8px; }
+.option-hint { color:var(--muted); font-size:11px; line-height:1.5; }
 .submit-actions { display:flex; gap:10px; justify-content:flex-end; }
 .status-msg { font-size:11px; color:var(--muted); min-height:16px; margin:0; }
 .status-msg.error { color:var(--danger); }

@@ -3,7 +3,7 @@
 # 一键启动 CenterPoint Clip 可视化服务
 #
 # 用法：
-#   bash start_server.sh              # 使用默认配置
+#   bash start_server.sh              # 启动服务，在页面中选择配置和权重
 #   bash start_server.sh --port 8082  # 自定义端口
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -16,8 +16,8 @@ cd "$SCRIPT_DIR"
 mkdir -p work_dirs
 
 # ── 默认参数（可在此修改） ─────────────────────────────────────────────────────
-CONFIG="configs/nusc_centerpoint_voxelnet_0075voxel_fix_bn_z.py"
-CHECKPOINT="work_dirs/epoch_20.pth"
+CONFIG=""
+CHECKPOINT=""
 PORT=8081
 HOST="0.0.0.0"
 
@@ -30,8 +30,8 @@ while [[ $# -gt 0 ]]; do
     --host)       HOST="$2";       shift 2 ;;
     -h|--help)
       echo "用法: bash start_server.sh [选项]"
-      echo "  --config     <路径>   模型 config 文件（默认: $CONFIG）"
-      echo "  --checkpoint <路径>   权重文件（默认: $CHECKPOINT）"
+      echo "  --config     <路径>   可选：服务端默认模型 config 文件（默认: 空，页面选择）"
+      echo "  --checkpoint <路径>   可选：服务端默认权重文件（默认: 空，页面选择）"
       echo "  --port       <端口>   服务端口（默认: $PORT）"
       echo "  --host       <主机>   绑定主机（默认: $HOST）"
       exit 0 ;;
@@ -101,11 +101,9 @@ if ! command -v java &>/dev/null; then
 fi
 echo -e "  ${GREEN}✓ Java${NC} $(java -version 2>&1 | head -1)"
 JAR="$SCRIPT_DIR/backend/target/centerpoint-viz-1.0.0.jar"
-if [ ! -f "$JAR" ]; then
-  echo -e "${YELLOW}  JAR 不存在，正在构建...${NC}"
-  cd "$SCRIPT_DIR/backend" && mvn package -DskipTests -q && cd "$SCRIPT_DIR"
-  echo -e "  ${GREEN}✓ 构建完成${NC}"
-fi
+echo -e "${YELLOW}  正在构建/刷新 Java JAR...${NC}"
+cd "$SCRIPT_DIR/backend" && mvn package -DskipTests -q && cd "$SCRIPT_DIR"
+echo -e "  ${GREEN}✓ 构建完成${NC}"
 echo -e "  ${GREEN}✓ Java JAR: $JAR${NC}"
 
 # ── 构建前端（Vite → frontend/dist，供 Spring Boot 静态资源使用）────────────────
@@ -131,18 +129,22 @@ echo -e "  ${GREEN}✓ 前端已编译: $FRONTEND_DIR/dist${NC}"
 # ── 检查关键文件 ───────────────────────────────────────────────────────────────
 echo -e "\n${YELLOW}[3/5] 检查文件...${NC}"
 
-MISSING=0
-
-if [ ! -f "$CONFIG" ]; then
-  echo -e "  ${RED}✗ Config 不存在: $CONFIG${NC}"; MISSING=1
+if [ -n "$CONFIG" ] && [ ! -f "$CONFIG" ]; then
+  echo -e "  ${RED}✗ Config 不存在: $CONFIG${NC}"
+  exit 1
+elif [ -n "$CONFIG" ]; then
+  echo -e "  ${GREEN}✓ 默认 Config:     $CONFIG${NC}"
 else
-  echo -e "  ${GREEN}✓ Config:     $CONFIG${NC}"
+  echo -e "  ${YELLOW}⚠ 未设置默认 Config，将在页面提交任务时选择${NC}"
 fi
 
-if [ ! -f "$CHECKPOINT" ]; then
-  echo -e "  ${YELLOW}⚠ Checkpoint 不存在: $CHECKPOINT（可在页面提交时手动指定）${NC}"
+if [ -n "$CHECKPOINT" ] && [ ! -f "$CHECKPOINT" ]; then
+  echo -e "  ${RED}✗ Checkpoint 不存在: $CHECKPOINT${NC}"
+  exit 1
+elif [ -n "$CHECKPOINT" ]; then
+  echo -e "  ${GREEN}✓ 默认 Checkpoint: $CHECKPOINT${NC}"
 else
-  echo -e "  ${GREEN}✓ Checkpoint: $CHECKPOINT${NC}"
+  echo -e "  ${YELLOW}⚠ 未设置默认 Checkpoint，将在页面提交任务时选择${NC}"
 fi
 
 if [ ! -f "clip_preview/clips_meta.json" ]; then
@@ -152,10 +154,6 @@ if [ ! -f "clip_preview/clips_meta.json" ]; then
 else
   CLIP_COUNT=$("$PYTHON_BIN" -c "import json; d=json.load(open('clip_preview/clips_meta.json')); print(d['total_clips'])" 2>/dev/null || echo "?")
   echo -e "  ${GREEN}✓ clips_meta.json（${CLIP_COUNT} clips）${NC}"
-fi
-
-if [ $MISSING -eq 1 ]; then
-  echo -e "\n${RED}关键文件缺失，请检查后重试。${NC}"; exit 1
 fi
 
 # ── 检查端口占用 ───────────────────────────────────────────────────────────────
@@ -171,8 +169,8 @@ echo -e "  ${GREEN}✓ 端口 $PORT 可用${NC}"
 
 # ── 启动服务 ───────────────────────────────────────────────────────────────────
 echo -e "\n${YELLOW}[5/5] 启动服务...${NC}"
-echo -e "  Config:     ${CYAN}$CONFIG${NC}"
-echo -e "  Checkpoint: ${CYAN}$CHECKPOINT${NC}"
+echo -e "  默认 Config:     ${CYAN}${CONFIG:-页面选择}${NC}"
+echo -e "  默认 Checkpoint: ${CYAN}${CHECKPOINT:-页面选择}${NC}"
 echo -e "  地址:       ${CYAN}http://127.0.0.1:$PORT${NC}"
 echo -e "\n${GREEN}按 Ctrl+C 停止服务${NC}\n"
 

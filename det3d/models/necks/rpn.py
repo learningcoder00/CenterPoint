@@ -19,6 +19,82 @@ from ..registry import NECKS
 from ..utils import build_norm_layer
 
 
+class TopBEVAttention(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        num_heads=4,
+        attn_ratio=0.5,
+        reduction=4,
+        dropout=0.0,
+    ):
+        super(TopBEVAttention, self).__init__()
+
+        if num_heads <= 0:
+            raise ValueError("num_heads must be positive")
+        if not 0 < attn_ratio <= 1:
+            raise ValueError("attn_ratio must be in (0, 1]")
+
+        self.num_heads = num_heads
+        self.reduction = max(1, int(reduction))
+        self.pool = (
+            nn.AvgPool2d(self.reduction, stride=self.reduction)
+            if self.reduction > 1
+            else nn.Identity()
+        )
+
+        attn_channels = max(num_heads, int(in_channels * attn_ratio))
+        attn_channels = int(math.ceil(attn_channels / num_heads) * num_heads)
+        if in_channels % num_heads != 0:
+            raise ValueError("in_channels must be divisible by num_heads")
+
+        self.attn_channels = attn_channels
+        self.head_dim = attn_channels // num_heads
+        self.value_dim = in_channels // num_heads
+        self.scale = self.head_dim ** -0.5
+
+        self.q = nn.Conv2d(in_channels, attn_channels, kernel_size=1, bias=False)
+        self.k = nn.Conv2d(in_channels, attn_channels, kernel_size=1, bias=False)
+        self.v = nn.Conv2d(in_channels, in_channels, kernel_size=1, bias=False)
+        self.proj = nn.Conv2d(in_channels, in_channels, kernel_size=1, bias=False)
+        self.attn_drop = nn.Dropout(dropout)
+        self.proj_drop = nn.Dropout(dropout)
+        self.gamma = nn.Parameter(torch.zeros(1))
+
+    def forward(self, x):
+        residual = x
+        x = self.pool(x)
+        batch_size, _, height, width = x.shape
+        num_tokens = height * width
+
+        q = self.q(x).view(batch_size, self.num_heads, self.head_dim, num_tokens)
+        k = self.k(x).view(batch_size, self.num_heads, self.head_dim, num_tokens)
+        v = self.v(x).view(batch_size, self.num_heads, self.value_dim, num_tokens)
+
+        q = q.permute(0, 1, 3, 2)
+        v = v.permute(0, 1, 3, 2)
+
+        attn = torch.matmul(q, k) * self.scale
+        attn = torch.softmax(attn, dim=-1)
+        attn = self.attn_drop(attn)
+
+        out = torch.matmul(attn, v)
+        out = out.permute(0, 1, 3, 2).contiguous()
+        out = out.view(batch_size, -1, height, width)
+        out = self.proj(out)
+        out = self.proj_drop(out)
+
+        if self.reduction > 1:
+            out = F.interpolate(
+                out,
+                size=residual.shape[-2:],
+                mode="bilinear",
+                align_corners=False,
+            )
+
+        return residual + self.gamma * out
+
+
 @NECKS.register_module
 class RPN(nn.Module):
     def __init__(
@@ -32,6 +108,11 @@ class RPN(nn.Module):
         norm_cfg=None,
         name="rpn",
         logger=None,
+        enable_top_attn=False,
+        top_attn_num_heads=4,
+        top_attn_attn_ratio=0.5,
+        top_attn_reduction=4,
+        top_attn_dropout=0.0,
         **kwargs
     ):
         super(RPN, self).__init__()
@@ -51,6 +132,7 @@ class RPN(nn.Module):
         assert len(self._num_upsample_filters) == len(self._upsample_strides)
 
         self._upsample_start_idx = len(self._layer_nums) - len(self._upsample_strides)
+        self.enable_top_attn = enable_top_attn
 
         must_equal_list = []
         for i in range(len(self._upsample_strides)):
@@ -112,7 +194,18 @@ class RPN(nn.Module):
         self.blocks = nn.ModuleList(blocks)
         self.deblocks = nn.ModuleList(deblocks)
 
-        logger.info("Finish RPN Initialization")
+        self.top_attn = None
+        if self.enable_top_attn:
+            self.top_attn = TopBEVAttention(
+                self._num_filters[-1],
+                num_heads=top_attn_num_heads,
+                attn_ratio=top_attn_attn_ratio,
+                reduction=top_attn_reduction,
+                dropout=top_attn_dropout,
+            )
+
+        if logger is not None:
+            logger.info("Finish RPN Initialization")
 
     @property
     def downsample_factor(self):
@@ -151,6 +244,8 @@ class RPN(nn.Module):
         ups = []
         for i in range(len(self.blocks)):
             x = self.blocks[i](x)
+            if self.top_attn is not None and i == len(self.blocks) - 1:
+                x = self.top_attn(x)
             if i - self._upsample_start_idx >= 0:
                 ups.append(self.deblocks[i - self._upsample_start_idx](x))
         if len(ups) > 0:

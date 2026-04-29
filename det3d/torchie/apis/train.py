@@ -31,7 +31,8 @@ def example_to_device(example, device=None, non_blocking=False) -> dict:
     example_torch = {}
     float_names = ["voxels", "bev_map"]
     for k, v in example.items():
-        if k in ["anchors", "anchors_mask", "reg_targets", "reg_weights", "labels", 'points']:
+        if k in ["anchors", "anchors_mask", "reg_targets", "reg_weights", "labels", 'points',
+                "hm", "anno_box", "ind", "mask", "cat", "corner_hm", "corner_hm_4ch"]:
             example_torch[k] = [res.to(device, non_blocking=non_blocking) for res in v]
         elif k in [
             "voxels",
@@ -272,7 +273,7 @@ def train_detector(model, dataset, cfg, distributed=False, validate=False, logge
     total_steps = cfg.total_epochs * len(data_loaders[0])
     # print(f"total_steps: {total_steps}")
     if distributed:
-        model = apex.parallel.convert_syncbn_model(model)
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     if cfg.lr_config.type == "one_cycle":
         # build trainer
         optimizer = build_one_cycle_optimizer(model, cfg.optimizer)
