@@ -46,10 +46,10 @@ public class JobExecutor {
         }
     }
 
-    public void submit(String jobId, String config, String checkpoint) {
+    public void submit(String jobId, String config, String checkpoint, String visualizationMode) {
         pool.submit(() -> {
             try {
-                executeJob(jobId, config, checkpoint);
+                executeJob(jobId, config, checkpoint, visualizationMode);
             } catch (Exception e) {
                 log.error("Unexpected error in job {}", jobId, e);
                 jobRepo.updateFailed(jobId, "Internal error: " + e.getMessage());
@@ -57,7 +57,7 @@ public class JobExecutor {
         });
     }
 
-    private void executeJob(String jobId, String config, String checkpoint) throws Exception {
+    private void executeJob(String jobId, String config, String checkpoint, String visualizationMode) throws Exception {
         // Atomic CAS: only proceed if still 'pending'
         if (!jobRepo.claimRunning(jobId)) {
             log.info("Job {} already claimed by another worker, skipping", jobId);
@@ -90,6 +90,7 @@ public class JobExecutor {
         visCmd.add(projectRoot.resolve(props.getVisScript()).toString());
         visCmd.add("--config"); visCmd.add(config);
         visCmd.add("--checkpoint"); visCmd.add(checkpoint);
+        visCmd.add("--visualization-mode"); visCmd.add(visualizationMode);
         visCmd.add("--output-dir"); visCmd.add(framesDir.toString());
         visCmd.add("--tokens");
         visCmd.addAll(tokens);

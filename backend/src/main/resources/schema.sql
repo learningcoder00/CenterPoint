@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     clip_id    TEXT NOT NULL,
     config     TEXT NOT NULL DEFAULT '',
     checkpoint TEXT NOT NULL DEFAULT '',
+    visualization_mode TEXT NOT NULL DEFAULT 'bev_cameras',
     status     TEXT NOT NULL DEFAULT 'pending',
     progress   INTEGER NOT NULL DEFAULT 0,
     total      INTEGER NOT NULL DEFAULT 0,

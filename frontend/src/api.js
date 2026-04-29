@@ -33,10 +33,11 @@ export async function fetchConfig() {
   return request('/api/config')
 }
 
-export async function submitJobs(clipIds, config, checkpoint) {
+export async function submitJobs(clipIds, config, checkpoint, visualizationMode) {
   const body = { clip_ids: clipIds }
   if (config) body.config = config
   if (checkpoint) body.checkpoint = checkpoint
+  if (visualizationMode) body.visualization_mode = visualizationMode
   return request('/api/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

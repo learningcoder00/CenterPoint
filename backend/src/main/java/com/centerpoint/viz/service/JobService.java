@@ -24,17 +24,20 @@ public class JobService {
         this.jobExecutor = jobExecutor;
     }
 
-    public Job createAndSubmit(String clipId, String config, String checkpoint) throws IOException {
+    public Job createAndSubmit(String clipId, String config, String checkpoint, String visualizationMode) throws IOException {
         if (!clipService.exists(clipId)) {
             throw new IllegalArgumentException("Unknown clip_id: " + clipId);
         }
         int total = clipService.getFrameCount(clipId);
-        String jobId = jobRepo.create(clipId, config, checkpoint, total);
-        jobExecutor.submit(jobId, config, checkpoint);
+        String jobId = jobRepo.create(clipId, config, checkpoint, visualizationMode, total);
+        jobExecutor.submit(jobId, config, checkpoint, visualizationMode);
 
         Job j = new Job();
         j.setJobId(jobId);
         j.setClipId(clipId);
+        j.setConfig(config);
+        j.setCheckpoint(checkpoint);
+        j.setVisualizationMode(visualizationMode);
         j.setStatus("pending");
         return j;
     }

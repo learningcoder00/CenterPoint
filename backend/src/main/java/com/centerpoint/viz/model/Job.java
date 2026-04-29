@@ -5,6 +5,7 @@ public class Job {
     private String clipId;
     private String config;
     private String checkpoint;
+    private String visualizationMode;
     private String status;
     private int progress;
     private int total;
@@ -25,6 +26,8 @@ public class Job {
     public void setConfig(String v) { this.config = v; }
     public String getCheckpoint() { return checkpoint; }
     public void setCheckpoint(String v) { this.checkpoint = v; }
+    public String getVisualizationMode() { return visualizationMode; }
+    public void setVisualizationMode(String v) { this.visualizationMode = v; }
     public String getStatus() { return status; }
     public void setStatus(String v) { this.status = v; }
     public int getProgress() { return progress; }

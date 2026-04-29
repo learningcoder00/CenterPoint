@@ -71,6 +71,18 @@ CLASS_COLORS_BGR = [
 BEV_RESOLUTION = 1350
 CAM_DISPLAY_W = 800
 CAM_DISPLAY_H = 450
+POINT_VIEW_W = 1600
+POINT_VIEW_H = 900
+
+# Forward-view coordinate convention requested by the UI:
+#   x: vehicle forward, y: vehicle left/right, z: up.
+# The raw lidar frame used by this dataset is right-forward-up in this view path,
+# so convert raw xyz -> visualization xyz before filtering/projecting.
+RAW_LIDAR_TO_FORWARD_VIEW = np.array([
+    [0.0, 1.0, 0.0],
+    [-1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0],
+], dtype=np.float32)
 
 
 def corners_3d_box(center, wlh, orientation):
@@ -298,9 +310,175 @@ def add_legend(img, score_threshold, timestamp=None, frame_idx=None, total_frame
     return canvas
 
 
+def resolve_data_path(path, data_root):
+    if not path:
+        return None
+    if os.path.isabs(path) or os.path.exists(path):
+        return path
+    return os.path.join(data_root, path)
+
+
+def load_lidar_points(info, data_root):
+    lidar_path = resolve_data_path(info.get("lidar_path"), data_root)
+    if not lidar_path or not os.path.exists(lidar_path):
+        return None, lidar_path
+    points = np.fromfile(lidar_path, dtype=np.float32)
+    if points.size % 5 == 0:
+        return points.reshape(-1, 5), lidar_path
+    if points.size % 4 == 0:
+        return points.reshape(-1, 4), lidar_path
+    raise ValueError(f"Unsupported lidar point format: {lidar_path}, values={points.size}")
+
+
+def transform_points_to_forward_view(points):
+    if points is None:
+        return None
+    transformed = points.copy()
+    transformed[:, :3] = points[:, :3] @ RAW_LIDAR_TO_FORWARD_VIEW.T
+    return transformed
+
+
+def transform_corners_to_forward_view(corners):
+    return RAW_LIDAR_TO_FORWARD_VIEW @ corners
+
+
+def virtual_forward_camera(camera_height=1.5, focal=820.0):
+    """
+    Virtual camera extrinsic/intrinsic for lidar-frame projection.
+    Camera center is at lidar-frame (0, 0, camera_height), looking along lidar +x.
+    """
+    lidar_to_cam = np.array([
+        [0.0, -1.0,  0.0, 0.0],
+        [0.0,  0.0, -1.0, camera_height],
+        [1.0,  0.0,  0.0, 0.0],
+        [0.0,  0.0,  0.0, 1.0],
+    ], dtype=np.float32)
+    intrinsic = np.array([
+        [focal, 0.0, POINT_VIEW_W / 2],
+        [0.0, focal, POINT_VIEW_H * 0.58],
+        [0.0, 0.0, 1.0],
+    ], dtype=np.float32)
+    return lidar_to_cam, intrinsic
+
+
+def project_lidar_points_to_virtual_camera(points, lidar_to_cam, intrinsic, x_range=(0.0, 40.0), y_range=(-20.0, 20.0)):
+    xyz = points[:, :3].astype(np.float32)
+    mask = (
+        (xyz[:, 0] >= x_range[0]) & (xyz[:, 0] <= x_range[1]) &
+        (xyz[:, 1] >= y_range[0]) & (xyz[:, 1] <= y_range[1])
+    )
+    xyz = xyz[mask]
+    if xyz.size == 0:
+        return np.empty((0,), dtype=np.float32), np.empty((0,), dtype=np.int32), np.empty((0,), dtype=np.int32)
+
+    points_homo = np.hstack([xyz, np.ones((xyz.shape[0], 1), dtype=np.float32)])
+    cam = (lidar_to_cam @ points_homo.T).T
+    depth = cam[:, 2]
+    valid = depth > 0.1
+    cam = cam[valid]
+    depth = depth[valid]
+    if cam.size == 0:
+        return np.empty((0,), dtype=np.float32), np.empty((0,), dtype=np.int32), np.empty((0,), dtype=np.int32)
+
+    uvw = (intrinsic @ cam[:, :3].T).T
+    u = (uvw[:, 0] / uvw[:, 2]).astype(np.int32)
+    v = (uvw[:, 1] / uvw[:, 2]).astype(np.int32)
+    in_img = (u >= 0) & (u < POINT_VIEW_W) & (v >= 0) & (v < POINT_VIEW_H)
+    return depth[in_img], u[in_img], v[in_img]
+
+
+def draw_forward_boxes(img, detections, lidar_to_cam, intrinsic, transform_to_forward_view=False):
+    for center, wlh, quat, label, score in detections:
+        corners = corners_3d_box(center, wlh, quat)
+        if transform_to_forward_view:
+            corners = transform_corners_to_forward_view(corners)
+        corners_2d = project_box_to_image(corners, lidar_to_cam, intrinsic, POINT_VIEW_W, POINT_VIEW_H)
+        if corners_2d is None:
+            continue
+        color = CLASS_COLORS_BGR[label % len(CLASS_COLORS_BGR)]
+        draw_3d_box_on_image(img, corners_2d, color, linewidth=3)
+        valid = corners_2d[~np.isnan(corners_2d).any(axis=1)]
+        if len(valid) > 0:
+            anchor = valid.mean(axis=0).astype(int)
+            text = f"{CLASS_NAMES[label % len(CLASS_NAMES)]} {score:.2f}"
+            cv2.putText(img, text, (anchor[0] + 4, anchor[1] - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+
+
+def draw_forward_pointcloud(points, detections=None, timestamp=None, frame_idx=None, total_frames=None,
+                            x_range=(0.0, 40.0), y_range=(-20.0, 20.0), camera_height=1.5):
+    """Render lidar points and predicted 3D boxes through a virtual forward-looking camera."""
+    img = np.zeros((POINT_VIEW_H, POINT_VIEW_W, 3), dtype=np.uint8)
+    img[:] = (8, 10, 18)
+    lidar_to_cam, intrinsic = virtual_forward_camera(camera_height=camera_height)
+    points = transform_points_to_forward_view(points)
+
+    if points is None or len(points) == 0:
+        cv2.putText(img, "No lidar points", (50, POINT_VIEW_H // 2),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (180, 180, 180), 2, cv2.LINE_AA)
+        draw_forward_boxes(img, detections or [], lidar_to_cam, intrinsic, transform_to_forward_view=True)
+        return add_pointcloud_overlay(img, timestamp, frame_idx, total_frames, x_range=x_range, y_range=y_range)
+
+    depth, u, v = project_lidar_points_to_virtual_camera(points, lidar_to_cam, intrinsic, x_range=x_range, y_range=y_range)
+    if depth.size == 0:
+        cv2.putText(img, "No lidar points in x[0,40], y[-20,20]", (50, POINT_VIEW_H // 2),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (180, 180, 180), 2, cv2.LINE_AA)
+        draw_forward_boxes(img, detections or [], lidar_to_cam, intrinsic, transform_to_forward_view=True)
+        return add_pointcloud_overlay(img, timestamp, frame_idx, total_frames, x_range=x_range, y_range=y_range)
+
+    if depth.size:
+        order = np.argsort(-depth)  # draw far points first, near points last
+        norm = np.clip((depth - x_range[0]) / max(x_range[1] - x_range[0], 1e-6), 0, 1)
+        colors = cv2.applyColorMap((255 * (1 - norm)).astype(np.uint8), cv2.COLORMAP_TURBO)[:, 0, :]
+        for idx in order:
+            radius = 1 if depth[idx] > 25 else 2
+            cv2.circle(img, (int(u[idx]), int(v[idx])), radius,
+                       tuple(int(c) for c in colors[idx]), -1, cv2.LINE_AA)
+
+    draw_forward_boxes(img, detections or [], lidar_to_cam, intrinsic, transform_to_forward_view=True)
+
+    # Horizon and ego/camera marker.
+    horizon_y = int(intrinsic[1, 2])
+    horizon_x = int(intrinsic[0, 2])
+    cv2.line(img, (0, horizon_y), (POINT_VIEW_W, horizon_y), (45, 55, 75), 1, cv2.LINE_AA)
+    cv2.circle(img, (horizon_x, horizon_y), 5, (255, 255, 255), -1, cv2.LINE_AA)
+    return add_pointcloud_overlay(img, timestamp, frame_idx, total_frames, x_range=x_range, y_range=y_range)
+
+
+def add_pointcloud_overlay(img, timestamp=None, frame_idx=None, total_frames=None,
+                           x_range=(0.0, 40.0), y_range=(-20.0, 20.0)):
+    cv2.putText(img, "Virtual camera: position (0, 0, 1.5), looking forward (+x / vehicle front)",
+                (24, 38), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (235, 240, 255), 2, cv2.LINE_AA)
+    cv2.putText(img, f"Points filtered to x[{x_range[0]:.0f},{x_range[1]:.0f}], y[{y_range[0]:.0f},{y_range[1]:.0f}]; color by x distance",
+                (24, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (190, 205, 230), 1, cv2.LINE_AA)
+
+    bar_x, bar_y, bar_w, bar_h = 24, POINT_VIEW_H - 58, 320, 16
+    grad = np.linspace(255, 0, bar_w, dtype=np.uint8)[None, :]
+    grad_img = cv2.applyColorMap(grad, cv2.COLORMAP_TURBO)
+    img[bar_y:bar_y + bar_h, bar_x:bar_x + bar_w] = grad_img
+    cv2.rectangle(img, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (220, 220, 220), 1)
+    cv2.putText(img, f"{x_range[0]:.0f}m", (bar_x, bar_y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (220, 220, 220), 1)
+    cv2.putText(img, f"{x_range[1]:.0f}m", (bar_x + bar_w - 42, bar_y - 6),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (220, 220, 220), 1)
+
+    right_text_parts = []
+    if timestamp is not None:
+        dt = datetime.datetime.fromtimestamp(timestamp)
+        right_text_parts.append(dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
+    if frame_idx is not None and total_frames is not None:
+        right_text_parts.append(f"[{frame_idx}/{total_frames}]")
+    right_text = "  |  ".join(right_text_parts)
+    if right_text:
+        text_size = cv2.getTextSize(right_text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)[0]
+        cv2.putText(img, right_text, (POINT_VIEW_W - text_size[0] - 24, POINT_VIEW_H - 28),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (220, 220, 220), 1, cv2.LINE_AA)
+    return img
+
+
 def visualize_sample(token, detection, info, data_root, output_dir,
                      score_threshold=0.3, bev_range=54.0,
-                     frame_idx=None, total_frames=None):
+                     frame_idx=None, total_frames=None,
+                     visualization_mode="bev_cameras"):
     """Visualize a single sample."""
     detections = parse_detections(detection, score_threshold)
     if len(detections) == 0:
@@ -308,6 +486,20 @@ def visualize_sample(token, detection, info, data_root, output_dir,
         # Continue with empty detections
 
     timestamp = info.get("timestamp")
+
+    if visualization_mode == "forward_points":
+        points, lidar_path = load_lidar_points(info, data_root)
+        if points is None:
+            print(f"  [WARN] Missing lidar data for token {token[:8]}... path={lidar_path}")
+        result = draw_forward_pointcloud(
+            points, detections=detections, timestamp=timestamp,
+            frame_idx=frame_idx, total_frames=total_frames)
+        prefix = f"{frame_idx:04d}_" if frame_idx is not None else ""
+        out_path = os.path.join(output_dir, f"{prefix}{token}.jpg")
+        cv2.imwrite(out_path, result, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        print(f"  Saved: {out_path}  (forward point cloud)")
+        return
+
     bev_img = draw_bev(detections, bev_range)
 
     cam_paths = info.get("all_cams_path", [])
@@ -364,10 +556,12 @@ def visualize_sample(token, detection, info, data_root, output_dir,
 def run_inference(cfg, checkpoint_path, max_samples=-1, tokens=None):
     """Build model, load weights, run inference on val set. Returns (predictions, infos_list)."""
     if not cfg.test_cfg.get("circular_nms", False):
-        # The local environment lacks the iou3d CUDA extension required by rotate NMS.
-        # Switch to circle NMS to keep inference usable.
-        cfg.test_cfg.circular_nms = True
-        cfg.test_cfg.min_radius = [4, 12, 10, 1, 0.85, 0.175]
+        try:
+            import det3d.ops.iou3d_nms.iou3d_nms_cuda  # noqa: F401
+        except ImportError:
+            print("[WARN] iou3d CUDA extension unavailable; falling back to circle NMS")
+            cfg.test_cfg.circular_nms = True
+            cfg.test_cfg.min_radius = [4, 12, 10, 1, 0.85, 0.175]
 
     model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
     print(f"Loading checkpoint from {checkpoint_path} ...")
@@ -451,6 +645,9 @@ def main():
                         help="Max samples to visualize (-1 for all)")
     parser.add_argument("--tokens", nargs="+", default=None,
                         help="Specific sample tokens to visualize")
+    parser.add_argument("--visualization-mode", default="bev_cameras",
+                        choices=["bev_cameras", "forward_points"],
+                        help="Visualization layout: BEV + 6 cameras, or forward point cloud view")
     args = parser.parse_args()
 
     use_inference = args.config is not None and args.checkpoint is not None
@@ -499,6 +696,7 @@ def main():
 
     total_frames = len(tokens)
     print(f"\nVisualizing {total_frames} samples (score >= {args.score_threshold}) ...")
+    print(f"Visualization mode: {args.visualization_mode}")
     for i, token in enumerate(tokens):
         print(f"[{i+1}/{total_frames}] Token: {token[:16]}...")
 
@@ -514,6 +712,7 @@ def main():
             data_root, args.output_dir,
             args.score_threshold, args.bev_range,
             frame_idx=i + 1, total_frames=total_frames,
+            visualization_mode=args.visualization_mode,
         )
 
     print(f"\nDone! Results saved to {args.output_dir}/")

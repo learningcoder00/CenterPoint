@@ -31,6 +31,7 @@ public class JobController {
     public ResponseEntity<?> submitJobs(@RequestBody SubmitJobsRequest body) {
         String config = notEmpty(body.getConfig()) ? body.getConfig() : props.getConfig();
         String checkpoint = notEmpty(body.getCheckpoint()) ? body.getCheckpoint() : props.getCheckpoint();
+        String visualizationMode = notEmpty(body.getVisualizationMode()) ? body.getVisualizationMode() : "bev_cameras";
 
         if (!notEmpty(config)) {
             return ResponseEntity.status(400).body(Map.of("detail",
@@ -40,15 +41,20 @@ public class JobController {
             return ResponseEntity.status(400).body(Map.of("detail",
                 "No checkpoint specified. Pass 'checkpoint' in body or start server with --app.checkpoint."));
         }
+        if (!Set.of("bev_cameras", "forward_points").contains(visualizationMode)) {
+            return ResponseEntity.status(400).body(Map.of("detail",
+                "Invalid visualization_mode. Use 'bev_cameras' or 'forward_points'."));
+        }
 
         List<Map<String, Object>> created = new ArrayList<>();
         for (String clipId : body.getClipIds()) {
             try {
-                Job job = jobService.createAndSubmit(clipId, config, checkpoint);
+                Job job = jobService.createAndSubmit(clipId, config, checkpoint, visualizationMode);
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("job_id", job.getJobId());
                 m.put("clip_id", job.getClipId());
                 m.put("status", job.getStatus());
+                m.put("visualization_mode", job.getVisualizationMode());
                 created.add(m);
             } catch (IllegalArgumentException e) {
                 return ResponseEntity.status(400).body(Map.of("detail", e.getMessage()));

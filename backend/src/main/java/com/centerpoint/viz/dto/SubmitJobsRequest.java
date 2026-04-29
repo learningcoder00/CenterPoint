@@ -8,6 +8,8 @@ public class SubmitJobsRequest {
     private List<String> clipIds;
     private String config;
     private String checkpoint;
+    @JsonProperty("visualization_mode")
+    private String visualizationMode;
 
     public List<String> getClipIds() { return clipIds; }
     public void setClipIds(List<String> v) { this.clipIds = v; }
@@ -15,4 +17,6 @@ public class SubmitJobsRequest {
     public void setConfig(String v) { this.config = v; }
     public String getCheckpoint() { return checkpoint; }
     public void setCheckpoint(String v) { this.checkpoint = v; }
+    public String getVisualizationMode() { return visualizationMode; }
+    public void setVisualizationMode(String v) { this.visualizationMode = v; }
 }

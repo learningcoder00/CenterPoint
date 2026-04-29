@@ -9,6 +9,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
+import jakarta.annotation.PostConstruct;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -27,6 +28,23 @@ public class JobRepository {
         this.objectMapper = objectMapper;
     }
 
+    @PostConstruct
+    public void ensureSchema() {
+        Integer tableCount = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='jobs'",
+            Integer.class
+        );
+        if (tableCount == null || tableCount == 0) {
+            return;
+        }
+        boolean hasVisualizationMode = jdbc.queryForList("PRAGMA table_info(jobs)")
+            .stream()
+            .anyMatch(row -> "visualization_mode".equals(row.get("name")));
+        if (!hasVisualizationMode) {
+            jdbc.execute("ALTER TABLE jobs ADD COLUMN visualization_mode TEXT NOT NULL DEFAULT 'bev_cameras'");
+        }
+    }
+
     private static final RowMapper<Job> ROW_MAPPER = (rs, rowNum) -> mapRow(rs);
 
     private static Job mapRow(ResultSet rs) throws SQLException {
@@ -35,6 +53,7 @@ public class JobRepository {
         j.setClipId(rs.getString("clip_id"));
         j.setConfig(rs.getString("config"));
         j.setCheckpoint(rs.getString("checkpoint"));
+        j.setVisualizationMode(rs.getString("visualization_mode"));
         j.setStatus(rs.getString("status"));
         j.setProgress(rs.getInt("progress"));
         j.setTotal(rs.getInt("total"));
@@ -45,12 +64,12 @@ public class JobRepository {
         return j;
     }
 
-    public String create(String clipId, String config, String checkpoint, int total) {
+    public String create(String clipId, String config, String checkpoint, String visualizationMode, int total) {
         String jobId = UUID.randomUUID().toString().replace("-", "");
         double now = System.currentTimeMillis() / 1000.0;
         jdbc.update(
-            "INSERT INTO jobs (job_id, clip_id, config, checkpoint, status, total, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
-            jobId, clipId, config, checkpoint, "pending", total, now, now
+            "INSERT INTO jobs (job_id, clip_id, config, checkpoint, visualization_mode, status, total, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            jobId, clipId, config, checkpoint, visualizationMode, "pending", total, now, now
         );
         return jobId;
     }

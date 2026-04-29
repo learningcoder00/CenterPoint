@@ -10,6 +10,23 @@
 
         <div class="field">
           <label>
+            Visualization mode <span class="required">(required)</span>
+          </label>
+          <div class="mode-options">
+            <label
+              v-for="mode in visualizationModes"
+              :key="mode.value"
+              :class="['mode-card', { active: visualizationMode === mode.value }]"
+            >
+              <input v-model="visualizationMode" type="radio" :value="mode.value">
+              <span class="mode-title">{{ mode.label }}</span>
+              <span class="mode-desc">{{ mode.description }}</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>
             Config file <span class="required">(required)</span>
           </label>
           <div class="select-shell">
@@ -79,12 +96,25 @@ const configVal = ref('')
 const ckptVal = ref('')
 const selectedConfig = ref('')
 const selectedCheckpoint = ref('')
+const visualizationMode = ref('bev_cameras')
 const statusMsg = ref('')
 const statusType = ref('')
 const submitting = ref(false)
 
 const configOptions = computed(() => props.serverConfig.configs || [])
 const checkpointOptions = computed(() => props.serverConfig.checkpoints || [])
+const visualizationModes = [
+  {
+    value: 'bev_cameras',
+    label: 'BEV + 6 cameras',
+    description: 'Current stitched view with BEV and six camera panels.',
+  },
+  {
+    value: 'forward_points',
+    label: 'Forward point cloud',
+    description: 'Virtual view from (0,0,3), looking forward; points colored by x distance.',
+  },
+]
 
 watch(() => props.visible, (v) => {
   if (v) {
@@ -92,6 +122,7 @@ watch(() => props.visible, (v) => {
     selectedCheckpoint.value = ''
     configVal.value = ''
     ckptVal.value = ''
+    visualizationMode.value = 'bev_cameras'
     statusMsg.value = ''
     statusType.value = ''
   }
@@ -137,6 +168,7 @@ async function doSubmit() {
       props.clipIds,
       effectiveConfig,
       effectiveCkpt,
+      visualizationMode.value,
     )
     statusMsg.value = `Submitted ${data.jobs.length} job(s). Redirecting to Results…`
     statusType.value = 'ok'
@@ -158,6 +190,12 @@ async function doSubmit() {
 .chip-list { display:flex; flex-wrap:wrap; gap:6px; }
 .chip { padding:5px 11px; border-radius:999px; font-size:12px; font-weight:600; background:rgba(125,211,252,.14); color:var(--accent); border:1px solid rgba(125,211,252,.3); }
 .required { color:var(--danger); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+.mode-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.mode-card { display:flex; flex-direction:column; gap:4px; padding:12px; border:1px solid var(--border); border-radius:12px; background:var(--panel-alt); cursor:pointer; transition:border-color .2s var(--ease-out), background .2s var(--ease-out); }
+.mode-card.active { border-color:var(--accent); background:rgba(125,211,252,.12); }
+.mode-card input { display:none; }
+.mode-title { color:var(--text); font-weight:700; font-size:13px; }
+.mode-desc { color:var(--muted); font-size:11px; line-height:1.45; }
 .select-shell { position:relative; }
 .select-shell::after { content:'▾'; position:absolute; right:13px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none; font-size:12px; }
 .select-shell select { width:100%; min-height:40px; border-radius:10px; border:1px solid var(--border); background:var(--panel-alt); color:var(--text); padding:0 36px 0 12px; outline:none; appearance:none; font-size:12px; }
@@ -168,4 +206,5 @@ async function doSubmit() {
 .status-msg { font-size:11px; color:var(--muted); min-height:16px; margin:0; }
 .status-msg.error { color:var(--danger); }
 .status-msg.ok { color:var(--success); }
+@media (max-width: 640px) { .mode-options { grid-template-columns:1fr; } }
 </style>

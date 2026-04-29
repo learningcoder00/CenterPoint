@@ -13,6 +13,10 @@
         <div class="job-id">{{ job.job_id }}</div>
       </div>
       <div class="card-meta">
+        <div class="meta-item">
+          <span class="meta-label">View:</span>
+          <span class="meta-value">{{ formatVisualizationMode(job.visualization_mode) }}</span>
+        </div>
         <div class="meta-item meta-path">
           <span class="meta-label">Config:</span>
           <span class="meta-value path-value" :title="job.config || 'Not set'">{{ compactPath(job.config) }}</span>
@@ -73,6 +77,11 @@ function compactPath(path) {
   const parts = path.split('/')
   if (parts.length <= 2) return path
   return `${parts[0]}/…/${parts[parts.length - 1]}`
+}
+
+function formatVisualizationMode(mode) {
+  if (mode === 'forward_points') return 'Forward point cloud'
+  return 'BEV + 6 cameras'
 }
 </script>
 
