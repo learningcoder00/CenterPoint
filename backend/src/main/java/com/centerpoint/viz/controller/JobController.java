@@ -2,6 +2,7 @@ package com.centerpoint.viz.controller;
 
 import com.centerpoint.viz.config.AppProperties;
 import com.centerpoint.viz.dto.JobAnnotationRequest;
+import com.centerpoint.viz.dto.ReviewRequest;
 import com.centerpoint.viz.dto.SubmitJobsRequest;
 import com.centerpoint.viz.model.Job;
 import com.centerpoint.viz.service.JobService;
@@ -32,6 +33,8 @@ public class JobController {
         String config = notEmpty(body.getConfig()) ? body.getConfig() : props.getConfig();
         String checkpoint = notEmpty(body.getCheckpoint()) ? body.getCheckpoint() : props.getCheckpoint();
         String visualizationMode = notEmpty(body.getVisualizationMode()) ? body.getVisualizationMode() : "bev_cameras";
+        String configB = body.getConfigB();
+        String checkpointB = body.getCheckpointB();
 
         if (!notEmpty(config)) {
             return ResponseEntity.status(400).body(Map.of("detail",
@@ -41,28 +44,56 @@ public class JobController {
             return ResponseEntity.status(400).body(Map.of("detail",
                 "No checkpoint specified. Pass 'checkpoint' in body or start server with --app.checkpoint."));
         }
-        if (!Set.of("bev_cameras", "forward_points").contains(visualizationMode)) {
+        if (!Set.of("bev_cameras", "forward_points", "bev_compare").contains(visualizationMode)) {
             return ResponseEntity.status(400).body(Map.of("detail",
-                "Invalid visualization_mode. Use 'bev_cameras' or 'forward_points'."));
+                "Invalid visualization_mode. Use 'bev_cameras', 'forward_points', or 'bev_compare'."));
+        }
+        if ("bev_compare".equals(visualizationMode)) {
+            if (!notEmpty(configB) || !notEmpty(checkpointB)) {
+                return ResponseEntity.status(400).body(Map.of("detail",
+                    "bev_compare mode requires both 'config_b' and 'checkpoint_b'."));
+            }
+        } else {
+            // ignore B-side fields for non-compare modes to keep the row clean
+            configB = "";
+            checkpointB = "";
         }
 
+        boolean allowReuse = body.getReuseCompleted() == null || body.getReuseCompleted();
+
         List<Map<String, Object>> created = new ArrayList<>();
+        int reusedCount = 0;
+        int newCount = 0;
         for (String clipId : body.getClipIds()) {
             try {
-                Job job = jobService.createAndSubmit(clipId, config, checkpoint, visualizationMode);
+                JobService.SubmitResult result = jobService.submitOrReuse(
+                    clipId, config, checkpoint, configB, checkpointB, visualizationMode, allowReuse
+                );
+                Job job = result.job();
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("job_id", job.getJobId());
                 m.put("clip_id", job.getClipId());
                 m.put("status", job.getStatus());
                 m.put("visualization_mode", job.getVisualizationMode());
+                m.put("reused", result.reused());
+                if ("bev_compare".equals(job.getVisualizationMode())) {
+                    m.put("config_b", job.getConfigB());
+                    m.put("checkpoint_b", job.getCheckpointB());
+                }
                 created.add(m);
+                if (result.reused()) reusedCount++;
+                else newCount++;
             } catch (IllegalArgumentException e) {
                 return ResponseEntity.status(400).body(Map.of("detail", e.getMessage()));
             } catch (IOException e) {
                 return ResponseEntity.status(500).body(Map.of("detail", e.getMessage()));
             }
         }
-        return ResponseEntity.status(202).body(Map.of("jobs", created));
+        return ResponseEntity.status(202).body(Map.of(
+            "jobs", created,
+            "reused_count", reusedCount,
+            "new_count", newCount
+        ));
     }
 
     @GetMapping
@@ -103,6 +134,51 @@ public class JobController {
         return ResponseEntity.ok(annotations.get());
     }
 
+    @GetMapping("/{jobId}/review")
+    public ResponseEntity<?> getJobReview(@PathVariable String jobId) {
+        var review = jobService.getJobReview(jobId);
+        if (review.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("detail", "Job not found"));
+        }
+        return ResponseEntity.ok(review.get());
+    }
+
+    @PutMapping("/{jobId}/review")
+    public ResponseEntity<?> putJobReview(@PathVariable String jobId, @RequestBody ReviewRequest body) {
+        try {
+            var saved = jobService.setJobReview(jobId, body);
+            if (saved.isEmpty()) {
+                return ResponseEntity.status(404).body(Map.of("detail", "Job not found"));
+            }
+            return ResponseEntity.ok(saved.get());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).body(Map.of("detail", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{jobId}/star")
+    public ResponseEntity<?> starJob(@PathVariable String jobId) {
+        try {
+            jobService.starJob(jobId);
+            return ResponseEntity.ok(Map.of("job_id", jobId, "starred", true));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("detail", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{jobId}/star")
+    public ResponseEntity<?> unstarJob(@PathVariable String jobId) {
+        try {
+            boolean ok = jobService.unstarJob(jobId);
+            if (!ok) {
+                return ResponseEntity.status(404).body(Map.of("detail", "Job not found or not starred"));
+            }
+            return ResponseEntity.ok(Map.of("job_id", jobId, "starred", false));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("detail", e.getMessage()));
+        }
+    }
+
     @DeleteMapping("/{jobId}")
     public ResponseEntity<?> deleteJob(@PathVariable String jobId) {
         try {
@@ -110,6 +186,8 @@ public class JobController {
             boolean ok = jobService.deleteJob(jobId, jobsDir);
             if (!ok) return ResponseEntity.status(404).body(Map.of("detail", "Job not found"));
             return ResponseEntity.ok(Map.of("deleted", jobId));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("detail", e.getMessage()));
         } catch (IOException e) {
             return ResponseEntity.status(500).body(Map.of("detail", e.getMessage()));
         }

@@ -40,16 +40,29 @@ public class JobExecutor {
 
     @PostConstruct
     public void recoverInterruptedJobs() {
-        int recovered = jobRepo.failInterruptedJobsOnStartup();
-        if (recovered > 0) {
-            log.warn("Marked {} interrupted jobs as failed during startup recovery", recovered);
+        List<String> recovered = jobRepo.failInterruptedJobsOnStartup();
+        if (recovered.isEmpty()) {
+            log.info("Startup recovery: no interrupted jobs found.");
+            return;
+        }
+        log.warn("Startup recovery: marked {} interrupted job(s) as failed: {}",
+            recovered.size(), recovered);
+        for (String jobId : recovered) {
+            log.warn("  - job {} was pending/running/stitching when the server stopped — resubmit to rerun.", jobId);
         }
     }
 
-    public void submit(String jobId, String config, String checkpoint, String visualizationMode) {
+    public void submit(
+        String jobId,
+        String config,
+        String checkpoint,
+        String configB,
+        String checkpointB,
+        String visualizationMode
+    ) {
         pool.submit(() -> {
             try {
-                executeJob(jobId, config, checkpoint, visualizationMode);
+                executeJob(jobId, config, checkpoint, configB, checkpointB, visualizationMode);
             } catch (Exception e) {
                 log.error("Unexpected error in job {}", jobId, e);
                 jobRepo.updateFailed(jobId, "Internal error: " + e.getMessage());
@@ -57,7 +70,14 @@ public class JobExecutor {
         });
     }
 
-    private void executeJob(String jobId, String config, String checkpoint, String visualizationMode) throws Exception {
+    private void executeJob(
+        String jobId,
+        String config,
+        String checkpoint,
+        String configB,
+        String checkpointB,
+        String visualizationMode
+    ) throws Exception {
         // Atomic CAS: only proceed if still 'pending'
         if (!jobRepo.claimRunning(jobId)) {
             log.info("Job {} already claimed by another worker, skipping", jobId);
@@ -91,6 +111,15 @@ public class JobExecutor {
         visCmd.add("--config"); visCmd.add(config);
         visCmd.add("--checkpoint"); visCmd.add(checkpoint);
         visCmd.add("--visualization-mode"); visCmd.add(visualizationMode);
+        if ("bev_compare".equals(visualizationMode)) {
+            if (configB == null || configB.isBlank() || checkpointB == null || checkpointB.isBlank()) {
+                jobRepo.updateFailed(jobId,
+                    "bev_compare job missing config_b/checkpoint_b; cannot run side-B inference.");
+                return;
+            }
+            visCmd.add("--config-b"); visCmd.add(configB);
+            visCmd.add("--checkpoint-b"); visCmd.add(checkpointB);
+        }
         visCmd.add("--output-dir"); visCmd.add(framesDir.toString());
         visCmd.add("--tokens");
         visCmd.addAll(tokens);

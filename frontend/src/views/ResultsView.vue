@@ -24,9 +24,9 @@
         </button>
       </div>
     </div>
-    <button class="btn-secondary btn-refresh" @click="load()">
-      <span :class="['refresh-icon', { spinning: loading }]">🔄</span>
-      Refresh
+    <button class="btn-secondary btn-refresh" type="button" :disabled="refreshing" @click="onRefresh">
+      <span class="refresh-icon">🔄</span>
+      {{ refreshing ? 'Refreshing…' : 'Refresh' }}
     </button>
   </section>
 
@@ -37,25 +37,31 @@
   <div v-else-if="!filtered.length" class="empty">
     <div class="empty-icon">📋</div>
     <div class="empty-message">{{ filterStatus === 'all' ? 'No jobs yet. Go to Clips, pick clips, and submit a visualization job.' : 'No matching jobs.' }}</div>
+    <p v-if="filterStatus === 'all' && hasCompareJobs" class="empty-hint">
+      Looking for A/B compare jobs? They live on the
+      <router-link to="/compare">Compare page</router-link>.
+    </p>
   </div>
   <div v-else class="grid">
     <JobCard
       v-for="j in filtered" :key="j.job_id"
       :job="j"
+      :show-star-toggle="true"
       @play-video="openVideo"
       @show-log="openLog"
       @delete="doDelete"
+      @toggle-star="onToggleStar"
     />
   </div>
 
-  <VideoModal :visible="videoOpen" :job="videoJob" @close="videoOpen = false" />
+  <VideoModal :visible="videoOpen" :job="videoJob" @close="videoOpen = false" @review-updated="onReviewUpdated" />
   <LogModal :visible="logOpen" :job="logJob" @close="logOpen = false" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { fetchJobs, deleteJob } from '../api.js'
+import { fetchJobs, deleteJob, starJob, unstarJob } from '../api.js'
 import { fmtStatus } from '../utils.js'
 import JobCard from '../components/JobCard.vue'
 import VideoModal from '../components/VideoModal.vue'
@@ -65,6 +71,7 @@ const statusFilters = ['all', 'pending', 'running', 'completed', 'failed']
 
 const allJobs = ref([])
 const loading = ref(true)
+const refreshing = ref(false)
 const search = ref('')
 const filterStatus = ref('all')
 const videoOpen = ref(false)
@@ -74,15 +81,23 @@ const logJob = ref(null)
 let refreshTimer = null
 let searchTimer = null
 
+const standardJobs = computed(() =>
+  (allJobs.value || []).filter(j => j.visualization_mode !== 'bev_compare')
+)
+
+const hasCompareJobs = computed(() =>
+  (allJobs.value || []).some(j => j.visualization_mode === 'bev_compare')
+)
+
 const stats = computed(() => ({
-  total: allJobs.value.length || '—',
-  running: allJobs.value.filter(j => j.status === 'running' || j.status === 'stitching').length,
-  done: allJobs.value.filter(j => j.status === 'completed').length,
-  failed: allJobs.value.filter(j => j.status === 'failed').length,
+  total: standardJobs.value.length || '—',
+  running: standardJobs.value.filter(j => j.status === 'running' || j.status === 'stitching').length,
+  done: standardJobs.value.filter(j => j.status === 'completed').length,
+  failed: standardJobs.value.filter(j => j.status === 'failed').length,
 }))
 
 const filtered = computed(() => {
-  let result = [...allJobs.value]
+  let result = [...standardJobs.value]
   const q = search.value.trim().toLowerCase()
   if (q) result = result.filter(j => j.clip_id.includes(q) || j.job_id.includes(q))
   if (filterStatus.value !== 'all') result = result.filter(j => j.status === filterStatus.value)
@@ -105,8 +120,48 @@ async function load(silent = false) {
   if (!silent) loading.value = false
 }
 
+async function onRefresh() {
+  if (refreshing.value) return
+  refreshing.value = true
+  const startedAt = Date.now()
+  try {
+    await load(true)
+  } finally {
+    const minVisible = 500
+    const elapsed = Date.now() - startedAt
+    setTimeout(() => { refreshing.value = false }, Math.max(0, minVisible - elapsed))
+  }
+}
+
 function openVideo(job) { videoJob.value = job; videoOpen.value = true }
 function openLog(job) { logJob.value = job; logOpen.value = true }
+
+function onReviewUpdated({ jobId, reviewStatus }) {
+  const idx = allJobs.value.findIndex(j => j.job_id === jobId)
+  if (idx !== -1) {
+    allJobs.value[idx] = { ...allJobs.value[idx], review_status: reviewStatus }
+  }
+  if (videoJob.value?.job_id === jobId) {
+    videoJob.value = { ...videoJob.value, review_status: reviewStatus }
+  }
+}
+
+async function onToggleStar(job) {
+  const wantStar = !job.starred
+  try {
+    if (wantStar) await starJob(job.job_id)
+    else await unstarJob(job.job_id)
+    const idx = allJobs.value.findIndex(j => j.job_id === job.job_id)
+    if (idx !== -1) {
+      allJobs.value[idx] = { ...allJobs.value[idx], starred: wantStar }
+    }
+    if (videoJob.value?.job_id === job.job_id) {
+      videoJob.value = { ...videoJob.value, starred: wantStar }
+    }
+  } catch (e) {
+    alert(`Star update failed: ${e.message}`)
+  }
+}
 
 async function doDelete(jobId) {
   if (!confirm('Delete this job and its outputs?')) return
@@ -176,19 +231,22 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
-.refresh-icon.spinning {
-  animation: spin 2s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 .loading-text {
   color: var(--muted);
   font-size: 14px;
 }
+
+.empty-hint {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.empty-hint a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 700;
+}
+.empty-hint a:hover { text-decoration: underline; }
 
 .grid {
   display: grid;

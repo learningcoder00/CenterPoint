@@ -79,7 +79,10 @@
   <Teleport to="body">
     <div :class="['sel-bar', { visible: selectedIds.size > 0 }]">
       <span class="count">{{ selectedIds.size }} selected</span>
-      <button class="btn-primary" @click="showSubmit = true">Start visualization</button>
+      <button class="btn-primary" @click="openSubmit('bev_cameras')">Start visualization</button>
+      <button class="btn-compare" @click="openSubmit('bev_compare')" title="Run side-by-side BEV with two configs/checkpoints">
+        <span class="compare-icon">⇆</span> A/B compare
+      </button>
       <button class="btn-secondary" @click="selectedIds.clear()">Clear selection</button>
     </div>
   </Teleport>
@@ -96,6 +99,7 @@
     :visible="showSubmit"
     :clip-ids="[...selectedIds]"
     :server-config="serverConfig"
+    :default-mode="submitMode"
     @close="showSubmit = false"
     @submitted="selectedIds.clear()"
   />
@@ -119,6 +123,12 @@ const serverConfig = ref({})
 const previewOpen = ref(false)
 const previewClipId = ref('')
 const showSubmit = ref(false)
+const submitMode = ref('bev_cameras')
+
+function openSubmit(mode) {
+  submitMode.value = mode || 'bev_cameras'
+  showSubmit.value = true
+}
 
 const searchScopeOptions = [
   { value: 'all', label: 'All' },
@@ -241,6 +251,34 @@ onMounted(async () => {
   font-weight: 700;
   color: var(--accent);
   margin-right: 8px;
+}
+
+.btn-compare {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(244, 114, 182, 0.45);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(244, 114, 182, 0.22));
+  color: #fce7f3;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform .18s var(--ease-out), background .18s var(--ease-out), border-color .18s var(--ease-out);
+}
+.btn-compare:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.28), rgba(244, 114, 182, 0.32));
+  border-color: rgba(244, 114, 182, 0.7);
+}
+.btn-compare .compare-icon {
+  font-size: 15px;
+  background: linear-gradient(135deg, #38bdf8, #f472b6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 900;
 }
 
 .fps-control {

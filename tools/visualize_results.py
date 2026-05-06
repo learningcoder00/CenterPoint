@@ -1,8 +1,9 @@
 """
 Visualize CenterPoint detection results:
-  - Center: BEV with detection boxes (no point cloud)
-  - Left:   3 forward-facing camera images with projected 3D boxes
-  - Right:  3 backward-facing camera images with projected 3D boxes
+  - bev_cameras    : Center BEV (with boxes) + 6 cameras (with boxes)
+  - forward_points : Virtual forward-looking point cloud + boxes
+  - bev_compare    : Two BEVs (config A vs config B, both with boxes) +
+                     3 forward / 3 backward cameras WITHOUT boxes
 
 Usage (config + checkpoint, runs inference internally):
     python tools/visualize_results.py \
@@ -20,6 +21,14 @@ Usage (pre-computed prediction pkl, skip inference):
         --output-dir vis_output \
         --score-threshold 0.3 \
         --max-samples 10
+
+Usage (A vs B compare visualization):
+    python tools/visualize_results.py \
+        --visualization-mode bev_compare \
+        --config configs/A.py    --checkpoint work_dirs/A/epoch_20.pth \
+        --config-b configs/B.py  --checkpoint-b work_dirs/B/epoch_20.pth \
+        --output-dir vis_compare \
+        --tokens TOKEN1 TOKEN2 ...
 """
 
 import argparse
@@ -127,8 +136,11 @@ def parse_detections(detection, score_threshold=0.3):
     return results
 
 
-def draw_bev(detections, bev_range=54.0):
-    """Draw BEV image with detection boxes only."""
+def draw_bev(detections, bev_range=54.0, title=None):
+    """Draw BEV image with detection boxes only.
+
+    title: optional caption rendered at the top of the BEV (e.g. "A: configs/x.py").
+    """
     img = np.zeros((BEV_RESOLUTION, BEV_RESOLUTION, 3), dtype=np.uint8)
     img[:] = (40, 40, 40)
 
@@ -169,6 +181,15 @@ def draw_bev(detections, bev_range=54.0):
         [cx + ego_size, cy + ego_size],
     ], dtype=np.int32)
     cv2.fillPoly(img, [ego_pts], (255, 255, 255))
+
+    if title:
+        # Draw a translucent banner so the title is readable on top of the BEV.
+        banner_h = 64
+        banner = img[:banner_h].copy()
+        overlay = np.full_like(banner, (15, 15, 15))
+        img[:banner_h] = cv2.addWeighted(banner, 0.35, overlay, 0.65, 0)
+        cv2.putText(img, title, (24, 44),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.1, (245, 245, 245), 2, cv2.LINE_AA)
 
     return img
 
@@ -236,8 +257,13 @@ def draw_3d_box_on_image(img, corners_2d, color, linewidth=2):
                    tuple(int(c * 0.8) for c in color), linewidth)
 
 
-def draw_camera_image(img_path, detections, extrinsic, intrinsic, cam_name):
-    """Load camera image and draw projected 3D boxes."""
+def draw_camera_image(img_path, detections, extrinsic, intrinsic, cam_name,
+                      draw_boxes=True):
+    """Load camera image and (optionally) draw projected 3D boxes.
+
+    When ``draw_boxes`` is False the camera image is rendered as a clean context
+    panel (used by the bev_compare layout where boxes only live on the BEVs).
+    """
     img = cv2.imread(img_path)
     if img is None:
         img = np.zeros((900, 1600, 3), dtype=np.uint8)
@@ -246,15 +272,16 @@ def draw_camera_image(img_path, detections, extrinsic, intrinsic, cam_name):
         return cv2.resize(img, (CAM_DISPLAY_W, CAM_DISPLAY_H))
 
     h, w = img.shape[:2]
-    extrinsic = np.array(extrinsic)
-    intrinsic = np.array(intrinsic)
 
-    for center, wlh, quat, label, score in detections:
-        corners = corners_3d_box(center, wlh, quat)
-        corners_2d = project_box_to_image(corners, extrinsic, intrinsic, w, h)
-        if corners_2d is not None:
-            color = CLASS_COLORS_BGR[label % len(CLASS_COLORS_BGR)]
-            draw_3d_box_on_image(img, corners_2d, color, linewidth=2)
+    if draw_boxes:
+        extrinsic = np.array(extrinsic)
+        intrinsic = np.array(intrinsic)
+        for center, wlh, quat, label, score in detections:
+            corners = corners_3d_box(center, wlh, quat)
+            corners_2d = project_box_to_image(corners, extrinsic, intrinsic, w, h)
+            if corners_2d is not None:
+                color = CLASS_COLORS_BGR[label % len(CLASS_COLORS_BGR)]
+                draw_3d_box_on_image(img, corners_2d, color, linewidth=2)
 
     cv2.putText(img, cam_name, (20, 40),
                 cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2, cv2.LINE_AA)
@@ -276,6 +303,28 @@ def compose_visualization(bev_img, front_imgs, back_imgs):
     bev_resized = cv2.resize(bev_img, (cam_h, cam_h))
 
     canvas = np.hstack([left_col, bev_resized, right_col])
+    return canvas
+
+
+def compose_visualization_compare(bev_img_a, bev_img_b, front_imgs, back_imgs):
+    """
+    A vs B compare layout (cameras WITHOUT boxes, both BEVs WITH boxes):
+      [front_left ]                          [back_left  ]
+      [front      ]  [ BEV_A ] [ BEV_B ]    [back       ]
+      [front_right]                          [back_right ]
+
+    Both BEVs are resized to a square whose side equals the camera column
+    height, so the whole canvas keeps a single height (3 cameras stacked).
+    """
+    left_col = np.vstack(front_imgs)
+    right_col = np.vstack(back_imgs)
+    cam_h = left_col.shape[0]
+
+    bev_a = cv2.resize(bev_img_a, (cam_h, cam_h))
+    bev_b = cv2.resize(bev_img_b, (cam_h, cam_h))
+    divider = np.full((cam_h, 6, 3), 255, dtype=np.uint8)
+
+    canvas = np.hstack([left_col, bev_a, divider, bev_b, right_col])
     return canvas
 
 
@@ -475,11 +524,60 @@ def add_pointcloud_overlay(img, timestamp=None, frame_idx=None, total_frames=Non
     return img
 
 
+def _resolve_cam_paths(cam_paths, data_root):
+    out = []
+    for p in cam_paths:
+        if os.path.isabs(p) or os.path.exists(p):
+            out.append(p)
+        else:
+            out.append(os.path.join(data_root, p))
+    return out
+
+
+def _build_camera_columns(info, data_root, detections, draw_boxes):
+    """Return (front_imgs, back_imgs) lists of 3 panels each."""
+    cam_paths = info.get("all_cams_path", [])
+    cam_extrinsics = info.get("all_cams_from_lidar", [])
+    cam_intrinsics = info.get("all_cams_intrinsic", [])
+
+    if len(cam_paths) != 6:
+        empty = [np.zeros((CAM_DISPLAY_H, CAM_DISPLAY_W, 3), dtype=np.uint8)] * 3
+        return list(empty), list(empty)
+
+    resolved = _resolve_cam_paths(cam_paths, data_root)
+
+    front_imgs = []
+    for idx, name in zip(FRONT_CAM_INDICES, FRONT_CAM_NAMES):
+        img = draw_camera_image(
+            resolved[idx], detections,
+            cam_extrinsics[idx], cam_intrinsics[idx], name,
+            draw_boxes=draw_boxes,
+        )
+        front_imgs.append(img)
+
+    back_imgs = []
+    for idx, name in zip(BACK_CAM_INDICES, BACK_CAM_NAMES):
+        img = draw_camera_image(
+            resolved[idx], detections,
+            cam_extrinsics[idx], cam_intrinsics[idx], name,
+            draw_boxes=draw_boxes,
+        )
+        back_imgs.append(img)
+
+    return front_imgs, back_imgs
+
+
 def visualize_sample(token, detection, info, data_root, output_dir,
                      score_threshold=0.3, bev_range=54.0,
                      frame_idx=None, total_frames=None,
-                     visualization_mode="bev_cameras"):
-    """Visualize a single sample."""
+                     visualization_mode="bev_cameras",
+                     detection_b=None,
+                     bev_titles=None):
+    """Visualize a single sample.
+
+    detection_b / bev_titles are only used by visualization_mode=='bev_compare'.
+    bev_titles is a tuple ``(title_a, title_b)`` rendered on top of each BEV.
+    """
     detections = parse_detections(detection, score_threshold)
     if len(detections) == 0:
         print(f"  [INFO] No detections above threshold for token {token[:8]}..., still generating visualization")
@@ -500,41 +598,42 @@ def visualize_sample(token, detection, info, data_root, output_dir,
         print(f"  Saved: {out_path}  (forward point cloud)")
         return
 
+    if visualization_mode == "bev_compare":
+        if detection_b is None:
+            raise ValueError("bev_compare mode requires detection_b for the same token")
+        detections_b = parse_detections(detection_b, score_threshold)
+
+        base_title_a, base_title_b = (bev_titles or ("A", "B"))
+        # Append per-frame detection counts so visual diff is obvious at a glance.
+        title_a = f"{base_title_a}  ·  {len(detections)} dets"
+        title_b = f"{base_title_b}  ·  {len(detections_b)} dets"
+        bev_a = draw_bev(detections, bev_range, title=title_a)
+        bev_b = draw_bev(detections_b, bev_range, title=title_b)
+
+        # Cameras without boxes (clean context panels).
+        front_imgs, back_imgs = _build_camera_columns(
+            info, data_root, detections, draw_boxes=False
+        )
+        result = compose_visualization_compare(bev_a, bev_b, front_imgs, back_imgs)
+        result = add_legend(result, score_threshold,
+                            timestamp=timestamp,
+                            frame_idx=frame_idx,
+                            total_frames=total_frames)
+        prefix = f"{frame_idx:04d}_" if frame_idx is not None else ""
+        out_path = os.path.join(output_dir, f"{prefix}{token}.jpg")
+        cv2.imwrite(out_path, result, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        ts_str = ""
+        if timestamp is not None:
+            dt = datetime.datetime.fromtimestamp(timestamp)
+            ts_str = f"  ts={dt.strftime('%H:%M:%S.%f')[:-3]}"
+        print(f"  Saved: {out_path}  (A:{len(detections)} / B:{len(detections_b)} dets){ts_str}")
+        return
+
     bev_img = draw_bev(detections, bev_range)
 
-    cam_paths = info.get("all_cams_path", [])
-    cam_extrinsics = info.get("all_cams_from_lidar", [])
-    cam_intrinsics = info.get("all_cams_intrinsic", [])
-
-    if len(cam_paths) != 6:
-        print(f"  [WARN] Missing camera data for token {token[:8]}..., skipping camera views")
-        front_imgs = [np.zeros((CAM_DISPLAY_H, CAM_DISPLAY_W, 3), dtype=np.uint8)] * 3
-        back_imgs = [np.zeros((CAM_DISPLAY_H, CAM_DISPLAY_W, 3), dtype=np.uint8)] * 3
-    else:
-        resolved_cam_paths = []
-        for p in cam_paths:
-            if os.path.isabs(p):
-                resolved_cam_paths.append(p)
-            elif os.path.exists(p):
-                resolved_cam_paths.append(p)
-            else:
-                resolved_cam_paths.append(os.path.join(data_root, p))
-
-        front_imgs = []
-        for idx, name in zip(FRONT_CAM_INDICES, FRONT_CAM_NAMES):
-            img = draw_camera_image(
-                resolved_cam_paths[idx], detections,
-                cam_extrinsics[idx], cam_intrinsics[idx], name
-            )
-            front_imgs.append(img)
-
-        back_imgs = []
-        for idx, name in zip(BACK_CAM_INDICES, BACK_CAM_NAMES):
-            img = draw_camera_image(
-                resolved_cam_paths[idx], detections,
-                cam_extrinsics[idx], cam_intrinsics[idx], name
-            )
-            back_imgs.append(img)
+    front_imgs, back_imgs = _build_camera_columns(
+        info, data_root, detections, draw_boxes=True
+    )
 
     result = compose_visualization(bev_img, front_imgs, back_imgs)
     result = add_legend(result, score_threshold,
@@ -624,9 +723,14 @@ def main():
     parser = argparse.ArgumentParser(description="Visualize CenterPoint detection results")
 
     parser.add_argument("--config", default=None,
-                        help="Model config file path")
+                        help="Model config file path (side A in bev_compare mode)")
     parser.add_argument("--checkpoint", default=None,
-                        help="Checkpoint (model weights) file path")
+                        help="Checkpoint file path (side A in bev_compare mode)")
+
+    parser.add_argument("--config-b", default=None,
+                        help="Side-B config (only used when --visualization-mode=bev_compare)")
+    parser.add_argument("--checkpoint-b", default=None,
+                        help="Side-B checkpoint (only used when --visualization-mode=bev_compare)")
 
     parser.add_argument("--prediction", default=None,
                         help="Pre-computed prediction.pkl (skip inference)")
@@ -646,17 +750,28 @@ def main():
     parser.add_argument("--tokens", nargs="+", default=None,
                         help="Specific sample tokens to visualize")
     parser.add_argument("--visualization-mode", default="bev_cameras",
-                        choices=["bev_cameras", "forward_points"],
-                        help="Visualization layout: BEV + 6 cameras, or forward point cloud view")
+                        choices=["bev_cameras", "forward_points", "bev_compare"],
+                        help="Visualization layout: BEV+6 cameras, forward point cloud, or A/B BEV compare")
     args = parser.parse_args()
 
     use_inference = args.config is not None and args.checkpoint is not None
     use_prediction = args.prediction is not None
+    is_compare = args.visualization_mode == "bev_compare"
 
     if not use_inference and not use_prediction:
         parser.error("Provide either (--config + --checkpoint) or --prediction")
 
+    if is_compare:
+        if not use_inference:
+            parser.error("bev_compare mode requires running inference; "
+                         "pass --config/--checkpoint and --config-b/--checkpoint-b")
+        if not args.config_b or not args.checkpoint_b:
+            parser.error("bev_compare mode requires --config-b and --checkpoint-b")
+
     os.makedirs(args.output_dir, exist_ok=True)
+
+    predictions_b = None
+    bev_titles = None
 
     if use_inference:
         cfg = Config.fromfile(args.config)
@@ -665,6 +780,18 @@ def main():
             cfg, args.checkpoint,
             max_samples=args.max_samples, tokens=args.tokens,
         )
+
+        if is_compare:
+            cfg_b = Config.fromfile(args.config_b)
+            print("\n[bev_compare] Running side-B inference ...")
+            predictions_b, _infos_b = run_inference(
+                cfg_b, args.checkpoint_b,
+                max_samples=args.max_samples, tokens=args.tokens,
+            )
+            bev_titles = (
+                f"A: {os.path.basename(args.config)}",
+                f"B: {os.path.basename(args.config_b)}",
+            )
     else:
         if args.infos is None:
             parser.error("--infos is required when using --prediction")
@@ -706,6 +833,9 @@ def main():
         if token not in token_to_info:
             print(f"  [SKIP] Token not in infos")
             continue
+        if is_compare and token not in predictions_b:
+            print(f"  [SKIP] Token not in side-B predictions")
+            continue
 
         visualize_sample(
             token, predictions[token], token_to_info[token],
@@ -713,6 +843,8 @@ def main():
             args.score_threshold, args.bev_range,
             frame_idx=i + 1, total_frames=total_frames,
             visualization_mode=args.visualization_mode,
+            detection_b=predictions_b[token] if is_compare else None,
+            bev_titles=bev_titles,
         )
 
     print(f"\nDone! Results saved to {args.output_dir}/")

@@ -5,6 +5,10 @@ public class Job {
     private String clipId;
     private String config;
     private String checkpoint;
+    /** Side-B config (only set when visualizationMode == "bev_compare"). */
+    private String configB = "";
+    /** Side-B checkpoint (only set when visualizationMode == "bev_compare"). */
+    private String checkpointB = "";
     private String visualizationMode;
     private String status;
     private int progress;
@@ -17,6 +21,9 @@ public class Job {
     // enriched fields (not in DB, added in list response)
     private String thumbnailPath;
     private int frameCount;
+    private String reviewStatus = "unreviewed";
+    /** Per-job favorite (not persisted on Job row; filled in list response). */
+    private boolean starred;
 
     public String getJobId() { return jobId; }
     public void setJobId(String v) { this.jobId = v; }
@@ -26,6 +33,10 @@ public class Job {
     public void setConfig(String v) { this.config = v; }
     public String getCheckpoint() { return checkpoint; }
     public void setCheckpoint(String v) { this.checkpoint = v; }
+    public String getConfigB() { return configB; }
+    public void setConfigB(String v) { this.configB = v == null ? "" : v; }
+    public String getCheckpointB() { return checkpointB; }
+    public void setCheckpointB(String v) { this.checkpointB = v == null ? "" : v; }
     public String getVisualizationMode() { return visualizationMode; }
     public void setVisualizationMode(String v) { this.visualizationMode = v; }
     public String getStatus() { return status; }
@@ -46,4 +57,10 @@ public class Job {
     public void setThumbnailPath(String v) { this.thumbnailPath = v; }
     public int getFrameCount() { return frameCount; }
     public void setFrameCount(int v) { this.frameCount = v; }
+
+    public String getReviewStatus() { return reviewStatus; }
+    public void setReviewStatus(String reviewStatus) { this.reviewStatus = reviewStatus; }
+
+    public boolean isStarred() { return starred; }
+    public void setStarred(boolean starred) { this.starred = starred; }
 }

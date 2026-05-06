@@ -4,6 +4,8 @@ public class JobAnnotationMarker {
     private String id;
     private double timeSec;
     private String type = "bug";
+    /** "a" | "b" | "both". Only meaningful for bev_compare jobs; default "both". */
+    private String side = "both";
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -13,4 +15,7 @@ public class JobAnnotationMarker {
 
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
+
+    public String getSide() { return side; }
+    public void setSide(String side) { this.side = side; }
 }

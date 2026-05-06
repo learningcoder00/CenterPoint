@@ -1,14 +1,19 @@
 <template>
   <div v-if="visible" class="modal-overlay" @click="$emit('close')">
-    <div class="modal-content" @click.stop>
+    <div :class="['modal-content', { 'is-expanded': isVideoExpanded }]" @click.stop>
       <div class="modal-header">
         <div>
           <h3>Video Playback</h3>
           <p v-if="job" class="modal-subtitle">{{ job.clip_id }} · {{ job.job_id }}</p>
         </div>
-        <button class="close-btn" type="button" @click="$emit('close')">
-          <span class="close-icon">×</span>
-        </button>
+        <div class="modal-header__actions">
+          <button class="expand-btn" type="button" @click="isVideoExpanded = !isVideoExpanded">
+            {{ isVideoExpanded ? 'Default size' : 'Enlarge video' }}
+          </button>
+          <button class="close-btn" type="button" @click="$emit('close')">
+            <span class="close-icon">×</span>
+          </button>
+        </div>
       </div>
 
       <div class="modal-body">
@@ -50,9 +55,9 @@
                       v-for="marker in sortedMarkers"
                       :key="marker.id"
                       type="button"
-                      class="marker-bug"
+                      :class="['marker-bug', `marker-bug--${markerSide(marker)}`]"
                       :style="{ left: `${markerPosition(marker.timeSec)}%` }"
-                      :title="`Bug marker at ${formatClock(marker.timeSec)}`"
+                      :title="markerTooltip(marker)"
                       @click.stop="jumpToMarker(marker)"
                     >
                       🐞
@@ -72,6 +77,16 @@
                         {{ isPlaying ? 'Pause' : 'Play' }}
                       </button>
                       <button type="button" class="player-btn" :disabled="!duration" @click="seekBy(1)">+1s</button>
+                      <div v-if="isCompareJob" class="side-picker" role="group" aria-label="Marker side">
+                        <span class="side-picker__label">Side</span>
+                        <button
+                          v-for="opt in sideOptions"
+                          :key="opt.value"
+                          type="button"
+                          :class="['side-picker__btn', `side-picker__btn--${opt.value}`, { active: nextMarkerSide === opt.value }]"
+                          @click="nextMarkerSide = opt.value"
+                        >{{ opt.label }}</button>
+                      </div>
                       <button type="button" class="player-btn bug-btn" :disabled="!duration" @click="addMarkerAtCurrentTime">
                         Add bug at current time
                       </button>
@@ -82,6 +97,60 @@
             </div>
 
             <div class="side-panel">
+              <div v-if="job?.status === 'completed'" class="review-panel">
+                <div class="review-panel__head">
+                  <div class="section-title">Review verdict</div>
+                  <span :class="['verdict-pill', currentVerdictClass]" aria-live="polite">
+                    <span class="verdict-pill__dot"></span>
+                    {{ reviewStatusLabel }}
+                  </span>
+                </div>
+                <p class="review-hint">Mark this visualization job for triage lists on the Review page.</p>
+                <div class="review-actions" role="group" aria-label="Verdict">
+                  <button
+                    type="button"
+                    :class="['review-btn', 'issue', { active: currentReviewStatus === 'has_issue' }]"
+                    :disabled="reviewSaving || reviewLoading"
+                    @click="applyReview('has_issue')"
+                  >
+                    <span class="review-btn__icon">⚠</span> Issue
+                  </button>
+                  <button
+                    type="button"
+                    :class="['review-btn', 'clean', { active: currentReviewStatus === 'no_issue' }]"
+                    :disabled="reviewSaving || reviewLoading"
+                    @click="applyReview('no_issue')"
+                  >
+                    <span class="review-btn__icon">✓</span> Clean
+                  </button>
+                  <button
+                    type="button"
+                    :class="['review-btn', 'reset', { active: currentReviewStatus === 'unreviewed' || !currentReviewStatus }]"
+                    :disabled="reviewSaving || reviewLoading"
+                    @click="applyReview('unreviewed')"
+                  >
+                    <span class="review-btn__icon">↺</span> Reset
+                  </button>
+                </div>
+                <textarea
+                  v-model="reviewerNote"
+                  class="review-note"
+                  placeholder="Optional verdict note (separate from debug markers note)…"
+                  @input="reviewDirty = true"
+                />
+                <button
+                  type="button"
+                  class="btn-save-review"
+                  :disabled="reviewSaving || reviewLoading || !reviewDirty"
+                  @click="saveReviewNoteOnly"
+                >
+                  {{ reviewSaving ? 'Saving…' : 'Save verdict note' }}
+                </button>
+                <span v-if="reviewLoading" class="review-status">Loading verdict…</span>
+                <span v-else-if="reviewError" class="review-status error">{{ reviewError }}</span>
+                <span v-else class="review-status subtle">Current: {{ reviewStatusLabel }}</span>
+              </div>
+
               <div class="video-info">
                 <div class="section-title">Job info</div>
                 <div class="info-row">
@@ -100,6 +169,32 @@
                   <span class="info-label">Completed</span>
                   <span class="info-value">{{ fmtTime(job.completed_at) }}</span>
                 </div>
+                <template v-if="isCompareJob">
+                  <div class="info-row info-row--ab">
+                    <span class="info-label">
+                      <span class="ab-tag ab-tag--a">A</span> Config
+                    </span>
+                    <span class="info-value mono" :title="job.config || ''">{{ job.config || '—' }}</span>
+                  </div>
+                  <div class="info-row info-row--ab">
+                    <span class="info-label">
+                      <span class="ab-tag ab-tag--a">A</span> Checkpoint
+                    </span>
+                    <span class="info-value mono" :title="job.checkpoint || ''">{{ job.checkpoint || '—' }}</span>
+                  </div>
+                  <div class="info-row info-row--ab">
+                    <span class="info-label">
+                      <span class="ab-tag ab-tag--b">B</span> Config
+                    </span>
+                    <span class="info-value mono" :title="job.config_b || ''">{{ job.config_b || '—' }}</span>
+                  </div>
+                  <div class="info-row info-row--ab">
+                    <span class="info-label">
+                      <span class="ab-tag ab-tag--b">B</span> Checkpoint
+                    </span>
+                    <span class="info-value mono" :title="job.checkpoint_b || ''">{{ job.checkpoint_b || '—' }}</span>
+                  </div>
+                </template>
               </div>
 
               <div class="annotation-panel">
@@ -125,6 +220,11 @@
                     <button type="button" class="marker-jump" @click="jumpToMarker(marker)">
                       🐞 {{ formatClock(marker.timeSec) }}
                     </button>
+                    <span
+                      v-if="isCompareJob"
+                      :class="['ab-tag', `ab-tag--${markerSide(marker)}`]"
+                      :title="`Side: ${markerSideLabel(marker)}`"
+                    >{{ markerSideLabel(marker) }}</span>
                     <button type="button" class="marker-delete" @click="removeMarker(marker.id)">Remove</button>
                   </div>
                 </div>
@@ -153,14 +253,14 @@
 <script setup>
 import { computed, nextTick, ref, watch, onMounted, onUnmounted } from 'vue'
 import { fmtStatus, fmtTime } from '../utils.js'
-import { fetchJobAnnotations, saveJobAnnotations, videoUrl } from '../api.js'
+import { fetchJobAnnotations, saveJobAnnotations, videoUrl, fetchJobReview, setJobReview } from '../api.js'
 
 const props = defineProps({
   visible: Boolean,
   job: Object,
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'review-updated'])
 
 const videoRef = ref(null)
 const progressTrackRef = ref(null)
@@ -177,6 +277,59 @@ const markers = ref([])
 const annotationLoading = ref(false)
 const annotationSaving = ref(false)
 const saveState = ref('idle')
+const isVideoExpanded = ref(false)
+
+const nextMarkerSide = ref('both')
+const sideOptions = [
+  { value: 'a', label: 'A' },
+  { value: 'b', label: 'B' },
+  { value: 'both', label: 'Both' },
+]
+
+const isCompareJob = computed(() => props.job?.visualization_mode === 'bev_compare')
+
+function normalizeSide(raw) {
+  const s = String(raw || '').toLowerCase()
+  return s === 'a' || s === 'b' || s === 'both' ? s : 'both'
+}
+
+function markerSide(marker) {
+  return normalizeSide(marker?.side)
+}
+
+function markerSideLabel(marker) {
+  const s = markerSide(marker)
+  if (s === 'a') return 'A'
+  if (s === 'b') return 'B'
+  return 'A+B'
+}
+
+function markerTooltip(marker) {
+  const t = `Bug marker at ${formatClock(marker.timeSec)}`
+  return isCompareJob.value ? `${t} · side ${markerSideLabel(marker)}` : t
+}
+
+const reviewStatus = ref('unreviewed')
+const reviewerNote = ref('')
+const reviewLoading = ref(false)
+const reviewSaving = ref(false)
+const reviewError = ref('')
+const reviewDirty = ref(false)
+
+const reviewStatusLabel = computed(() => {
+  if (reviewStatus.value === 'has_issue') return 'Issue'
+  if (reviewStatus.value === 'no_issue') return 'Clean'
+  return 'Pending'
+})
+
+const currentReviewStatus = computed(() => reviewStatus.value || 'unreviewed')
+
+const currentVerdictClass = computed(() => {
+  const s = reviewStatus.value
+  if (s === 'has_issue') return 'is-issue'
+  if (s === 'no_issue') return 'is-clean'
+  return 'is-pending'
+})
 
 const videoSrc = computed(() => {
   const jobId = props.job?.job_id
@@ -227,6 +380,69 @@ function makeMarkerId() {
   return `bug_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
+async function loadReview() {
+  const jobId = props.job?.job_id
+  if (!jobId || props.job?.status !== 'completed') return
+  reviewLoading.value = true
+  reviewError.value = ''
+  try {
+    const data = await fetchJobReview(jobId)
+    reviewStatus.value = data.review_status || 'unreviewed'
+    reviewerNote.value = data.reviewer_note || ''
+    reviewDirty.value = false
+  } catch (e) {
+    reviewError.value = 'Failed to load verdict'
+    reviewStatus.value = 'unreviewed'
+    reviewerNote.value = ''
+    console.error(e)
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+async function applyReview(status) {
+  const jobId = props.job?.job_id
+  if (!jobId) return
+  reviewSaving.value = true
+  reviewError.value = ''
+  try {
+    const data = await setJobReview(jobId, status, reviewerNote.value)
+    reviewStatus.value = data.review_status || status
+    reviewerNote.value = data.reviewer_note || ''
+    reviewDirty.value = false
+    emit('review-updated', {
+      jobId,
+      reviewStatus: reviewStatus.value,
+      reviewerNote: reviewerNote.value,
+    })
+  } catch (e) {
+    reviewError.value = e?.message || 'Save failed'
+  } finally {
+    reviewSaving.value = false
+  }
+}
+
+async function saveReviewNoteOnly() {
+  const jobId = props.job?.job_id
+  if (!jobId) return
+  reviewSaving.value = true
+  reviewError.value = ''
+  try {
+    const data = await setJobReview(jobId, reviewStatus.value, reviewerNote.value)
+    reviewerNote.value = data.reviewer_note || ''
+    reviewDirty.value = false
+    emit('review-updated', {
+      jobId,
+      reviewStatus: data.review_status || reviewStatus.value,
+      reviewerNote: reviewerNote.value,
+    })
+  } catch (e) {
+    reviewError.value = e?.message || 'Save failed'
+  } finally {
+    reviewSaving.value = false
+  }
+}
+
 async function loadAnnotations() {
   const jobId = props.job?.job_id
   if (!jobId) return
@@ -234,7 +450,9 @@ async function loadAnnotations() {
   try {
     const data = await fetchJobAnnotations(jobId)
     noteText.value = data.note || ''
-    markers.value = Array.isArray(data.markers) ? data.markers : []
+    markers.value = Array.isArray(data.markers)
+      ? data.markers.map((m) => ({ ...m, side: normalizeSide(m?.side) }))
+      : []
     saveState.value = 'idle'
   } catch (e) {
     noteText.value = ''
@@ -254,7 +472,9 @@ async function saveAnnotations() {
   try {
     const data = await saveJobAnnotations(jobId, noteText.value, sortedMarkers.value)
     noteText.value = data.note || ''
-    markers.value = Array.isArray(data.markers) ? data.markers : []
+    markers.value = Array.isArray(data.markers)
+      ? data.markers.map((m) => ({ ...m, side: normalizeSide(m?.side) }))
+      : []
     saveState.value = 'saved'
   } catch (e) {
     saveState.value = 'error'
@@ -292,6 +512,7 @@ function addMarkerAtTime(timeSec) {
       id: makeMarkerId(),
       timeSec: Math.max(0, Math.min(duration.value, Number(timeSec || 0))),
       type: 'bug',
+      side: isCompareJob.value ? nextMarkerSide.value : 'both',
     },
   ]
   saveState.value = 'idle'
@@ -377,6 +598,16 @@ function resetAnnotationState() {
   annotationLoading.value = false
   annotationSaving.value = false
   saveState.value = 'idle'
+  nextMarkerSide.value = 'both'
+}
+
+function resetReviewState() {
+  reviewStatus.value = 'unreviewed'
+  reviewerNote.value = ''
+  reviewLoading.value = false
+  reviewSaving.value = false
+  reviewError.value = ''
+  reviewDirty.value = false
 }
 
 function onKeydown(e) {
@@ -390,11 +621,12 @@ watch(
       if (videoRef.value) videoRef.value.pause()
       resetPlayerState()
       resetAnnotationState()
+      resetReviewState()
       return
     }
 
     await nextTick()
-    await loadAnnotations()
+    await Promise.all([loadAnnotations(), loadReview()])
 
     if (!videoRef.value || !videoSrc.value) return
     videoRef.value.load()
@@ -439,6 +671,10 @@ onUnmounted(() => {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
 }
 
+.modal-content.is-expanded {
+  width: min(1800px, 98vw);
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -454,6 +690,12 @@ onUnmounted(() => {
   font-size: 18px;
   font-weight: 700;
   color: var(--text);
+}
+
+.modal-header__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .modal-subtitle {
@@ -476,6 +718,27 @@ onUnmounted(() => {
   justify-content: center;
   border-radius: 50%;
   transition: all 0.2s var(--ease-out);
+}
+
+.expand-btn {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background .2s var(--ease-out),
+    border-color .2s var(--ease-out),
+    transform .2s var(--ease-out);
+}
+
+.expand-btn:hover {
+  transform: translateY(-1px);
+  background: var(--nav-hover);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
 
 .close-btn:hover {
@@ -509,6 +772,16 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
   gap: 20px;
+  align-items: start;
+}
+
+.modal-content.is-expanded .modal-layout {
+  grid-template-columns: 1fr;
+}
+
+.modal-content.is-expanded .side-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   align-items: start;
 }
 
@@ -551,6 +824,10 @@ onUnmounted(() => {
   border-radius: 12px;
   background: #02040a;
   object-fit: contain;
+}
+
+.modal-content.is-expanded .video-player {
+  max-height: min(78vh, 980px);
 }
 
 .player-shell {
@@ -600,6 +877,16 @@ onUnmounted(() => {
   font-size: 17px;
   line-height: 1;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
+}
+
+.marker-bug--a {
+  filter: drop-shadow(0 0 4px #38bdf8) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+}
+.marker-bug--b {
+  filter: drop-shadow(0 0 4px #f472b6) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+}
+.marker-bug--both {
+  filter: drop-shadow(0 0 4px #facc15) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
 }
 
 .progress-track {
@@ -690,11 +977,273 @@ onUnmounted(() => {
   color: #fff7f7;
 }
 
+.side-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.side-picker__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.side-picker__btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s var(--ease-out), color .15s var(--ease-out), border-color .15s var(--ease-out);
+}
+.side-picker__btn:hover { color: var(--text); background: var(--nav-hover); }
+.side-picker__btn--a.active   { color: #0a0d16; background: #38bdf8; border-color: #38bdf8; }
+.side-picker__btn--b.active   { color: #0a0d16; background: #f472b6; border-color: #f472b6; }
+.side-picker__btn--both.active{ color: #0a0d16; background: #facc15; border-color: #facc15; }
+
+.ab-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  padding: 0 6px;
+  height: 18px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  border: 1px solid transparent;
+  color: #0a0d16;
+}
+.ab-tag--a    { background: #38bdf8; }
+.ab-tag--b    { background: #f472b6; }
+.ab-tag--both { background: #facc15; }
+
+.info-row--ab .info-label { display: inline-flex; align-items: center; gap: 6px; }
+.info-value.mono {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text);
+  word-break: break-all;
+}
+
 .player-btn:disabled,
 .btn-save:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+.review-panel {
+  position: relative;
+  background:
+    radial-gradient(420px 180px at 0% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
+    var(--panel-alt);
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.review-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.verdict-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+}
+
+.verdict-pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.verdict-pill.is-issue {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.10);
+}
+.verdict-pill.is-clean {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.4);
+  background: rgba(74, 222, 128, 0.10);
+}
+.verdict-pill.is-pending {
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.32);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.review-hint {
+  margin: 6px 0 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.review-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 60%, transparent);
+}
+
+.review-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  border: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  cursor: pointer;
+  background: transparent;
+  color: var(--muted);
+  transition:
+    background .18s var(--ease-out),
+    color .18s var(--ease-out),
+    transform .18s var(--ease-out),
+    box-shadow .18s var(--ease-out);
+}
+
+.review-btn__icon {
+  font-size: 13px;
+  line-height: 1;
+  opacity: .9;
+}
+
+.review-btn:hover:not(:disabled):not(.active) {
+  background: var(--nav-hover);
+  color: var(--text);
+}
+
+.review-btn.issue.active {
+  color: #f87171;
+  background: linear-gradient(180deg, rgba(248, 113, 113, 0.22), rgba(248, 113, 113, 0.10));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    0 6px 16px rgba(248, 113, 113, 0.20);
+}
+
+.review-btn.clean.active {
+  color: #4ade80;
+  background: linear-gradient(180deg, rgba(74, 222, 128, 0.22), rgba(74, 222, 128, 0.10));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    0 6px 16px rgba(74, 222, 128, 0.20);
+}
+
+.review-btn.reset.active {
+  color: var(--text);
+  background: var(--nav-hover);
+}
+
+.review-btn:not(.active):active { transform: scale(.98); }
+
+.review-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.review-note {
+  width: 100%;
+  min-height: 78px;
+  resize: vertical;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 10px;
+  transition:
+    border-color .2s var(--ease-out),
+    background .2s var(--ease-out),
+    box-shadow .2s var(--ease-out);
+}
+
+.review-note:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.btn-save-review {
+  padding: 9px 14px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition:
+    background .18s var(--ease-out),
+    border-color .18s var(--ease-out),
+    transform .18s var(--ease-out);
+}
+
+.btn-save-review:hover:not(:disabled) {
+  background: var(--nav-hover);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  transform: translateY(-1px);
+}
+
+.btn-save-review:active:not(:disabled) { transform: scale(.98); }
+
+.btn-save-review:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.review-status {
+  display: block;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.review-status.subtle {
+  color: var(--muted);
+}
+
+.review-status.error {
+  color: var(--danger);
 }
 
 .video-info,

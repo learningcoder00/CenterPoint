@@ -5,6 +5,10 @@
         <nav class="nav" aria-label="Primary">
           <router-link to="/clips">Clips</router-link>
           <router-link to="/results">Results</router-link>
+          <router-link to="/compare" class="nav-link nav-link--compare">
+            <span class="nav-compare-icon">⇆</span> Compare
+          </router-link>
+          <router-link to="/review">Review</router-link>
           <router-link to="/ai-optimization">AI Optimization</router-link>
         </nav>
       </div>
@@ -117,6 +121,16 @@ watch(theme, (nextTheme) => {
 .topbar__left {
   display: flex;
   align-items: center;
+}
+
+.nav-link--compare .nav-compare-icon {
+  display: inline-block;
+  margin-right: 4px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #38bdf8, #f472b6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .theme-toggle {

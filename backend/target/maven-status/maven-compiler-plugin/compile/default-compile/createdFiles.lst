@@ -1,3 +1,4 @@
+com/centerpoint/viz/repository/JobStarRepository.class
 com/centerpoint/viz/controller/ClipController.class
 com/centerpoint/viz/service/JobService.class
 com/centerpoint/viz/dto/JobAnnotationMarker.class
@@ -7,9 +8,13 @@ com/centerpoint/viz/controller/AIController.class
 com/centerpoint/viz/dto/TagsRequest.class
 com/centerpoint/viz/controller/SpaController.class
 com/centerpoint/viz/model/Job.class
+com/centerpoint/viz/service/JobService$SubmitResult.class
 com/centerpoint/viz/config/WebConfig$SymlinkFollowingResourceResolver.class
 com/centerpoint/viz/controller/JobController$LimitedInputStream.class
 com/centerpoint/viz/service/ClipService.class
+com/centerpoint/viz/dto/ReviewRequest.class
+com/centerpoint/viz/repository/JobReviewRepository.class
+com/centerpoint/viz/dto/JobReviewResponse.class
 com/centerpoint/viz/dto/JobAnnotationResponse.class
 com/centerpoint/viz/controller/ConfigController.class
 com/centerpoint/viz/service/JobExecutor.class

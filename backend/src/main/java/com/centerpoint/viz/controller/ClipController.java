@@ -4,7 +4,6 @@ import com.centerpoint.viz.dto.TagsRequest;
 import com.centerpoint.viz.repository.TagRepository;
 import com.centerpoint.viz.service.ClipService;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,7 +17,6 @@ public class ClipController {
 
     private final ClipService clipService;
     private final TagRepository tagRepo;
-    private final ObjectMapper mapper = new ObjectMapper();
 
     public ClipController(ClipService clipService, TagRepository tagRepo) {
         this.clipService = clipService;
