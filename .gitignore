@@ -19,6 +19,9 @@ venv/
 debug/
 work_dirs/
 node_modules/
+backend/target/
+*.jar
+*.class
 reference/
 clip_preview/
 docs/
