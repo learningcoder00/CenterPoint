@@ -35,10 +35,60 @@
         <span class="refresh-icon">🔄</span>
         {{ refreshing ? 'Refreshing…' : 'Refresh' }}
       </button>
+      <button
+        :class="['btn-secondary', 'btn-select-toggle', { active: selectMode }]"
+        type="button"
+        :title="selectMode ? 'Exit selection mode' : 'Enter multi-select mode to batch delete compare jobs'"
+        @click="toggleSelectMode"
+      >
+        <span class="refresh-icon">☑</span>
+        {{ selectMode ? 'Cancel' : 'Select' }}
+      </button>
       <router-link class="btn-compare-cta" to="/clips" title="Pick clips and submit a new compare job">
         <span class="cta-icon">⇆</span>
         New compare
       </router-link>
+    </section>
+
+    <section v-if="selectMode" class="bulk-bar">
+      <span class="bulk-bar__count">
+        <strong>{{ selectedIds.size }}</strong> selected
+        <span v-if="staleCount" class="bulk-bar__sub">· {{ staleCount }} stale on this page</span>
+      </span>
+      <button class="bulk-btn" type="button" :disabled="!filtered.length" @click="selectAllVisible">
+        Select all visible ({{ filtered.length }})
+      </button>
+      <button
+        class="bulk-btn"
+        type="button"
+        :disabled="!staleCount"
+        :title="staleCount ? 'Add stale compare jobs (missing MP4 or clip not in current dataset) to the selection' : 'No stale compare jobs detected'"
+        @click="selectStale"
+      >
+        Select stale ({{ staleCount }})
+      </button>
+      <button class="bulk-btn" type="button" :disabled="!selectedIds.size" @click="clearSelection">
+        Clear
+      </button>
+      <button
+        class="bulk-btn bulk-btn--danger"
+        type="button"
+        :disabled="!selectedIds.size || bulkDeleting"
+        @click="bulkDeleteSelected"
+      >
+        <span class="refresh-icon">🗑</span>
+        {{ bulkDeleting ? 'Deleting…' : `Delete selected (${selectedIds.size})` }}
+      </button>
+      <button
+        class="bulk-btn bulk-btn--ghost"
+        type="button"
+        :disabled="bulkDeleting || !compareJobs.length"
+        :title="`Wipe every compare job (${compareJobs.length}) — does not touch standard visualization jobs`"
+        @click="bulkDeleteAll"
+      >
+        <span class="refresh-icon">⚠</span>
+        Delete ALL
+      </button>
     </section>
 
     <div v-if="loading" class="loading">
@@ -56,10 +106,14 @@
         :job="j"
         :show-star-toggle="true"
         :show-review="true"
+        :selectable="selectMode"
+        :selected="selectedIds.has(j.job_id)"
         @play-video="openVideo"
         @show-log="openLog"
         @delete="doDelete"
+        @cancel="doCancel"
         @toggle-star="onToggleStar"
+        @toggle-select="onToggleSelect"
       />
     </div>
 
@@ -69,14 +123,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { fetchJobs, deleteJob, starJob, unstarJob } from '../api.js'
+import { ref, computed, onMounted, onUnmounted, reactive, watch } from 'vue'
+import { fetchJobs, deleteJob, starJob, unstarJob, bulkDeleteJobs, cancelJob } from '../api.js'
 import { fmtStatus } from '../utils.js'
 import JobCard from '../components/JobCard.vue'
 import VideoModal from '../components/VideoModal.vue'
 import LogModal from '../components/LogModal.vue'
 
-const statusFilters = ['all', 'pending', 'running', 'completed', 'failed']
+const statusFilters = ['all', 'pending', 'running', 'completed', 'failed', 'cancelled']
 
 const allJobs = ref([])
 const loading = ref(true)
@@ -87,6 +141,9 @@ const videoOpen = ref(false)
 const videoJob = ref(null)
 const logOpen = ref(false)
 const logJob = ref(null)
+const selectMode = ref(false)
+const selectedIds = reactive(new Set())
+const bulkDeleting = ref(false)
 let refreshTimer = null
 
 const compareJobs = computed(() =>
@@ -187,11 +244,105 @@ async function doDelete(jobId) {
   if (!confirm('Delete this compare job and its outputs?')) return
   try {
     await deleteJob(jobId)
+    selectedIds.delete(jobId)
     await load()
   } catch (e) {
     alert(`Delete failed: ${e.message}`)
   }
 }
+
+async function doCancel(jobId) {
+  const job = compareJobs.value.find(j => j.job_id === jobId)
+  const msg = job && job.status === 'pending'
+    ? 'Remove this pending compare job from the queue?'
+    : 'Stop this running compare job? Partial frames will be cleaned up.'
+  if (!confirm(msg)) return
+  try {
+    await cancelJob(jobId)
+    await load()
+  } catch (e) {
+    alert(`Cancel failed: ${e.message}`)
+  }
+}
+
+const staleCount = computed(() => filtered.value.filter(j => j.stale).length)
+
+function toggleSelectMode() {
+  selectMode.value = !selectMode.value
+  if (!selectMode.value) selectedIds.clear()
+}
+
+function onToggleSelect(jobId) {
+  if (selectedIds.has(jobId)) selectedIds.delete(jobId)
+  else selectedIds.add(jobId)
+}
+
+function selectAllVisible() {
+  filtered.value.forEach(j => selectedIds.add(j.job_id))
+}
+
+function selectStale() {
+  filtered.value.filter(j => j.stale).forEach(j => selectedIds.add(j.job_id))
+}
+
+function clearSelection() {
+  selectedIds.clear()
+}
+
+async function bulkDeleteSelected() {
+  if (!selectedIds.size) return
+  const ids = [...selectedIds]
+  if (!confirm(`Delete ${ids.length} compare job${ids.length === 1 ? '' : 's'} and their outputs? This cannot be undone.`)) {
+    return
+  }
+  bulkDeleting.value = true
+  try {
+    const res = await bulkDeleteJobs({ jobIds: ids })
+    selectedIds.clear()
+    await load(true)
+    if (res.failed && res.errors?.length) {
+      const summary = `Deleted ${res.deleted}, ${res.failed} failed.`
+      alert(`${summary}\n\nFirst errors:\n` + res.errors.slice(0, 3).join('\n'))
+    }
+  } catch (e) {
+    alert(`Bulk delete failed: ${e.message}`)
+  } finally {
+    bulkDeleting.value = false
+  }
+}
+
+async function bulkDeleteAll() {
+  if (!compareJobs.value.length) return
+  const ids = compareJobs.value.map(j => j.job_id)
+  if (!confirm(
+    `Delete ALL ${ids.length} compare job${ids.length === 1 ? '' : 's'} and their outputs?\n\n` +
+    `This will not touch standard visualization jobs (manage them on the Results page).`,
+  )) {
+    return
+  }
+  bulkDeleting.value = true
+  try {
+    const res = await bulkDeleteJobs({ jobIds: ids })
+    selectedIds.clear()
+    selectMode.value = false
+    await load()
+    if (res.failed && res.errors?.length) {
+      alert(`Deleted ${res.deleted}, ${res.failed} failed.\n\nFirst errors:\n` + res.errors.slice(0, 3).join('\n'))
+    }
+  } catch (e) {
+    alert(`Bulk delete failed: ${e.message}`)
+  } finally {
+    bulkDeleting.value = false
+  }
+}
+
+// Drop selected ids that no longer exist after a refresh (server cleanup,
+// dataset switch, etc.) so the toolbar counter stays honest.
+watch(allJobs, (jobs) => {
+  if (!selectedIds.size) return
+  const known = new Set(jobs.map(j => j.job_id))
+  for (const id of [...selectedIds]) if (!known.has(id)) selectedIds.delete(id)
+})
 
 function onKeydown(e) {
   if (e.key === 'Escape') {
@@ -255,7 +406,8 @@ onUnmounted(() => {
   align-items: center;
 }
 
-.btn-refresh {
+.btn-refresh,
+.btn-select-toggle {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -263,10 +415,101 @@ onUnmounted(() => {
 }
 .refresh-icon { font-size: 14px; }
 
+.btn-select-toggle.active {
+  background: linear-gradient(180deg, rgba(125, 211, 252, 0.28), rgba(125, 211, 252, 0.14));
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background:
+    radial-gradient(360px 100px at 0% 50%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+    var(--panel-alt, rgba(15, 23, 42, 0.45));
+  box-shadow: var(--shadow);
+}
+
+.bulk-bar__count {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+.bulk-bar__count strong {
+  color: var(--accent);
+  font-size: 16px;
+  margin-right: 4px;
+}
+
+.bulk-bar__sub {
+  margin-left: 8px;
+  font-weight: 600;
+  color: #fbbf24;
+}
+
+.bulk-btn {
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background .18s var(--ease-out), border-color .18s var(--ease-out), transform .18s var(--ease-out);
+}
+
+.bulk-btn:hover:not(:disabled) {
+  background: var(--panel-alt);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.bulk-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bulk-btn--danger {
+  background: linear-gradient(180deg, rgba(248, 113, 113, 0.22), rgba(239, 68, 68, 0.10));
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fecaca;
+}
+
+.bulk-btn--danger:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(248, 113, 113, 0.32), rgba(239, 68, 68, 0.16));
+  border-color: rgba(248, 113, 113, 0.85);
+  color: #fee2e2;
+}
+
+.bulk-btn--ghost {
+  border-style: dashed;
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.5);
+}
+
+.bulk-btn--ghost:hover:not(:disabled) {
+  border-color: rgba(251, 191, 36, 0.85);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fde68a;
+}
+
 .btn-compare-cta {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  align-self: stretch;
   padding: 10px 16px;
   border-radius: 12px;
   border: 1px solid rgba(244, 114, 182, 0.45);

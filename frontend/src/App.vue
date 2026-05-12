@@ -3,6 +3,9 @@
     <header class="topbar">
       <div class="topbar__left">
         <nav class="nav" aria-label="Primary">
+          <router-link to="/home" class="nav-link nav-link--home">
+            <span class="nav-home-icon" aria-hidden="true">⌂</span> Home
+          </router-link>
           <router-link to="/clips">Clips</router-link>
           <router-link to="/results">Results</router-link>
           <router-link to="/compare" class="nav-link nav-link--compare">
@@ -131,6 +134,14 @@ watch(theme, (nextTheme) => {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+.nav-link--home .nav-home-icon {
+  display: inline-block;
+  margin-right: 4px;
+  font-weight: 900;
+  color: var(--accent);
+  transform: translateY(-1px);
 }
 
 .theme-toggle {

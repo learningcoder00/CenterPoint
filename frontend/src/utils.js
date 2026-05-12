@@ -12,7 +12,14 @@ export function fmtTime(ts) {
 }
 
 export function fmtStatus(s) {
-  const map = { pending: 'Pending', running: 'Running', stitching: 'Stitching', completed: 'Completed', failed: 'Failed' }
+  const map = {
+    pending: 'Pending',
+    running: 'Running',
+    stitching: 'Stitching',
+    completed: 'Completed',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+  }
   return map[s] || s
 }
 
@@ -20,6 +27,31 @@ export function fmtPath(p) {
   if (!p) return '—'
   const parts = p.replace(/\\/g, '/').split('/')
   return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : p
+}
+
+/** Trigger a browser download of the given Blob/string content. */
+export function downloadFile(content, filename, mimeType = 'application/octet-stream') {
+  const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  setTimeout(() => {
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, 0)
+}
+
+/** RFC 4180-ish CSV serializer; rows = array of arrays. */
+export function toCsv(rows) {
+  const esc = (v) => {
+    if (v == null) return ''
+    const s = typeof v === 'string' ? v : String(v)
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  return rows.map((row) => row.map(esc).join(',')).join('\r\n') + '\r\n'
 }
 
 export function fuzzyScore(text, pattern) {

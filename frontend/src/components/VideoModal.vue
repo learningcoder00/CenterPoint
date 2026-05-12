@@ -1,15 +1,12 @@
 <template>
   <div v-if="visible" class="modal-overlay" @click="$emit('close')">
-    <div :class="['modal-content', { 'is-expanded': isVideoExpanded }]" @click.stop>
+    <div class="modal-content" @click.stop>
       <div class="modal-header">
         <div>
           <h3>Video Playback</h3>
           <p v-if="job" class="modal-subtitle">{{ job.clip_id }} · {{ job.job_id }}</p>
         </div>
         <div class="modal-header__actions">
-          <button class="expand-btn" type="button" @click="isVideoExpanded = !isVideoExpanded">
-            {{ isVideoExpanded ? 'Default size' : 'Enlarge video' }}
-          </button>
           <button class="close-btn" type="button" @click="$emit('close')">
             <span class="close-icon">×</span>
           </button>
@@ -72,11 +69,13 @@
                     </div>
 
                     <div class="control-buttons">
-                      <button type="button" class="player-btn" :disabled="!duration" @click="seekBy(-1)">-1s</button>
-                      <button type="button" class="player-btn primary" :disabled="!videoSrc" @click="togglePlay">
+                      <button type="button" class="player-btn" :disabled="!duration" title="Previous frame" @click="stepFrames(-1)">⏮ Frame</button>
+                      <button type="button" class="player-btn" :disabled="!duration" title="Seek -1s (←)" @click="seekBy(-1)">-1s</button>
+                      <button type="button" class="player-btn primary" :disabled="!videoSrc" title="Play / pause (Space)" @click="togglePlay">
                         {{ isPlaying ? 'Pause' : 'Play' }}
                       </button>
-                      <button type="button" class="player-btn" :disabled="!duration" @click="seekBy(1)">+1s</button>
+                      <button type="button" class="player-btn" :disabled="!duration" title="Seek +1s (→)" @click="seekBy(1)">+1s</button>
+                      <button type="button" class="player-btn" :disabled="!duration" title="Next frame" @click="stepFrames(1)">Frame ⏭</button>
                       <div v-if="isCompareJob" class="side-picker" role="group" aria-label="Marker side">
                         <span class="side-picker__label">Side</span>
                         <button
@@ -87,10 +86,19 @@
                           @click="nextMarkerSide = opt.value"
                         >{{ opt.label }}</button>
                       </div>
-                      <button type="button" class="player-btn bug-btn" :disabled="!duration" @click="addMarkerAtCurrentTime">
-                        Add bug at current time
+                      <button type="button" class="player-btn bug-btn" :disabled="!duration" title="Add bug at current time (B)" @click="addMarkerAtCurrentTime">
+                        🐞 Add bug (B)
                       </button>
                     </div>
+                  </div>
+
+                  <div class="keymap-row">
+                    <span class="keymap-hint">Shortcuts:</span>
+                    <span class="kbd">Space</span><span class="kbd-label">play</span>
+                    <span class="kbd">←</span><span class="kbd-label">-1s</span>
+                    <span class="kbd">→</span><span class="kbd-label">+1s</span>
+                    <span class="kbd">B</span><span class="kbd-label">add bug</span>
+                    <span class="kbd">Esc</span><span class="kbd-label">close</span>
                   </div>
                 </div>
               </div>
@@ -138,14 +146,26 @@
                   placeholder="Optional verdict note (separate from debug markers note)…"
                   @input="reviewDirty = true"
                 />
-                <button
-                  type="button"
-                  class="btn-save-review"
-                  :disabled="reviewSaving || reviewLoading || !reviewDirty"
-                  @click="saveReviewNoteOnly"
-                >
-                  {{ reviewSaving ? 'Saving…' : 'Save verdict note' }}
-                </button>
+                <div class="review-cta-row">
+                  <button
+                    type="button"
+                    class="btn-save-review"
+                    :disabled="reviewSaving || reviewLoading || !reviewDirty"
+                    @click="saveReviewNoteOnly"
+                  >
+                    {{ reviewSaving ? 'Saving…' : 'Save verdict note' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-ask-ai"
+                    :disabled="!job?.job_id || job?.status !== 'completed'"
+                    title="Open AI Optimization with this job pre-filled"
+                    @click="askAiForJob"
+                  >
+                    <span class="ask-ai-icon">✨</span>
+                    Ask AI
+                  </button>
+                </div>
                 <span v-if="reviewLoading" class="review-status">Loading verdict…</span>
                 <span v-else-if="reviewError" class="review-status error">{{ reviewError }}</span>
                 <span v-else class="review-status subtle">Current: {{ reviewStatusLabel }}</span>
@@ -235,6 +255,15 @@
                 <button type="button" class="btn-save" :disabled="annotationLoading || annotationSaving || !job" @click="saveAnnotations">
                   {{ annotationSaving ? 'Saving...' : 'Save annotations' }}
                 </button>
+                <button
+                  type="button"
+                  class="btn-export-json"
+                  :disabled="annotationLoading || !job?.job_id"
+                  title="Download note + markers + verdict as JSON"
+                  @click="exportAnnotationsJson"
+                >
+                  ⬇ Export JSON
+                </button>
                 <span :class="['save-status', saveState]">{{ saveStatusText }}</span>
               </div>
             </div>
@@ -252,7 +281,8 @@
 
 <script setup>
 import { computed, nextTick, ref, watch, onMounted, onUnmounted } from 'vue'
-import { fmtStatus, fmtTime } from '../utils.js'
+import { useRouter } from 'vue-router'
+import { downloadFile, fmtStatus, fmtTime } from '../utils.js'
 import { fetchJobAnnotations, saveJobAnnotations, videoUrl, fetchJobReview, setJobReview } from '../api.js'
 
 const props = defineProps({
@@ -261,6 +291,51 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'review-updated'])
+
+const router = useRouter()
+
+function exportAnnotationsJson() {
+  if (!props.job?.job_id) return
+  const payload = {
+    job_id: props.job.job_id,
+    clip_id: props.job.clip_id,
+    visualization_mode: props.job.visualization_mode,
+    status: props.job.status,
+    review: {
+      status: reviewStatus.value || 'unreviewed',
+      reviewer_note: reviewerNote.value || '',
+    },
+    annotations: {
+      note: noteText.value || '',
+      markers: sortedMarkers.value.map((m) => ({
+        id: m.id,
+        time_sec: m.timeSec,
+        type: m.type,
+        side: m.side,
+      })),
+    },
+    exported_at: new Date().toISOString(),
+  }
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+  downloadFile(
+    JSON.stringify(payload, null, 2),
+    `centerpoint-annotations-${props.job.job_id}-${stamp}.json`,
+    'application/json;charset=utf-8'
+  )
+}
+
+function askAiForJob() {
+  const jobId = props.job?.job_id
+  if (!jobId) return
+  const query = { jobId }
+  const description = [reviewerNote.value, noteText.value]
+    .map((s) => (s || '').trim())
+    .filter(Boolean)
+    .join('\n\n')
+  if (description) query.description = description
+  emit('close')
+  router.push({ path: '/ai-optimization', query })
+}
 
 const videoRef = ref(null)
 const progressTrackRef = ref(null)
@@ -277,7 +352,6 @@ const markers = ref([])
 const annotationLoading = ref(false)
 const annotationSaving = ref(false)
 const saveState = ref('idle')
-const isVideoExpanded = ref(false)
 
 const nextMarkerSide = ref('both')
 const sideOptions = [
@@ -285,6 +359,13 @@ const sideOptions = [
   { value: 'b', label: 'B' },
   { value: 'both', label: 'Both' },
 ]
+
+/**
+ * Stitched BEV/Cameras videos are encoded at ~10 fps (see start_server stitching).
+ * Used by , / . frame stepping so each press moves a perceptible step regardless
+ * of how the underlying browser reports `requestVideoFrameCallback` precision.
+ */
+const ASSUMED_FPS = 10
 
 const isCompareJob = computed(() => props.job?.visualization_mode === 'bev_compare')
 
@@ -495,6 +576,17 @@ function seekBy(delta) {
   seekToTime(currentTime.value + delta)
 }
 
+/**
+ * Step the video by N frames using the configured FPS hint (default 10 fps for
+ * stitched BEV videos). Always pauses first to keep the step visible.
+ */
+function stepFrames(steps) {
+  if (!videoRef.value || !duration.value) return
+  if (!videoRef.value.paused) videoRef.value.pause()
+  const fps = ASSUMED_FPS
+  seekToTime(currentTime.value + steps / fps)
+}
+
 function togglePlay() {
   if (!videoRef.value) return
   if (videoRef.value.paused) {
@@ -610,8 +702,45 @@ function resetReviewState() {
   reviewDirty.value = false
 }
 
+function isTypingTarget(e) {
+  const t = e.target
+  if (!t) return false
+  if (t.isContentEditable) return true
+  const tag = (t.tagName || '').toLowerCase()
+  return tag === 'input' || tag === 'textarea' || tag === 'select'
+}
+
 function onKeydown(e) {
-  if (e.key === 'Escape') emit('close')
+  if (!props.visible) return
+  if (e.key === 'Escape') {
+    emit('close')
+    return
+  }
+  if (isTypingTarget(e)) return
+  // Modifier keys disable shortcuts so browser/system combos (Ctrl+R, etc.) still work.
+  if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+
+  switch (e.key) {
+    case ' ': // Space → play/pause
+      togglePlay()
+      e.preventDefault()
+      break
+    case 'ArrowLeft': // ← → seek -1s
+      seekBy(-1)
+      e.preventDefault()
+      break
+    case 'ArrowRight': // → → seek +1s
+      seekBy(1)
+      e.preventDefault()
+      break
+    case 'b':
+    case 'B':
+      addMarkerAtCurrentTime()
+      e.preventDefault()
+      break
+    default:
+      break
+  }
 }
 
 watch(
@@ -671,10 +800,6 @@ onUnmounted(() => {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
 }
 
-.modal-content.is-expanded {
-  width: min(1800px, 98vw);
-}
-
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -720,26 +845,6 @@ onUnmounted(() => {
   transition: all 0.2s var(--ease-out);
 }
 
-.expand-btn {
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    background .2s var(--ease-out),
-    border-color .2s var(--ease-out),
-    transform .2s var(--ease-out);
-}
-
-.expand-btn:hover {
-  transform: translateY(-1px);
-  background: var(--nav-hover);
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-}
 
 .close-btn:hover {
   background: rgba(255, 255, 255, 0.08);
@@ -772,16 +877,6 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
   gap: 20px;
-  align-items: start;
-}
-
-.modal-content.is-expanded .modal-layout {
-  grid-template-columns: 1fr;
-}
-
-.modal-content.is-expanded .side-panel {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   align-items: start;
 }
 
@@ -824,10 +919,6 @@ onUnmounted(() => {
   border-radius: 12px;
   background: #02040a;
   object-fit: contain;
-}
-
-.modal-content.is-expanded .video-player {
-  max-height: min(78vh, 980px);
 }
 
 .player-shell {
@@ -971,10 +1062,40 @@ onUnmounted(() => {
   border-color: rgba(125, 211, 252, 0.36);
 }
 
+.player-btn.primary {
+  min-width: 88px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .player-btn.bug-btn {
   background: linear-gradient(180deg, rgba(248, 113, 113, 0.92), rgba(239, 68, 68, 0.82));
   border-color: rgba(248, 113, 113, 0.42);
   color: #fff7f7;
+}
+
+.btn-export-json {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .18s var(--ease-out), border-color .18s var(--ease-out);
+}
+
+.btn-export-json:hover:not(:disabled) {
+  background: var(--panel-alt);
+  border-color: var(--accent);
+}
+
+.btn-export-json:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .side-picker {
@@ -1008,6 +1129,48 @@ onUnmounted(() => {
 .side-picker__btn--a.active   { color: #0a0d16; background: #38bdf8; border-color: #38bdf8; }
 .side-picker__btn--b.active   { color: #0a0d16; background: #f472b6; border-color: #f472b6; }
 .side-picker__btn--both.active{ color: #0a0d16; background: #facc15; border-color: #facc15; }
+
+.keymap-row {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.keymap-hint {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: var(--muted);
+  margin-right: 4px;
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+}
+
+.kbd-label {
+  margin-right: 8px;
+  letter-spacing: .04em;
+}
 
 .ab-tag {
   display: inline-flex;
@@ -1230,6 +1393,48 @@ onUnmounted(() => {
 .btn-save-review:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.review-cta-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.btn-ask-ai {
+  padding: 9px 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(192, 132, 252, 0.4);
+  background: linear-gradient(180deg, rgba(192, 132, 252, 0.22), rgba(192, 132, 252, 0.10));
+  color: #ede9fe;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition:
+    background .18s var(--ease-out),
+    border-color .18s var(--ease-out),
+    transform .18s var(--ease-out);
+}
+
+.btn-ask-ai:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(192, 132, 252, 0.32), rgba(192, 132, 252, 0.16));
+  border-color: rgba(192, 132, 252, 0.65);
+  transform: translateY(-1px);
+}
+
+.btn-ask-ai:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ask-ai-icon {
+  font-size: 13px;
 }
 
 .review-status {

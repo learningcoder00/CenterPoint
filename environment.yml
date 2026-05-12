@@ -1,0 +1,20 @@
+# Conda：仅创建 Python 3.8 + pip；PyTorch 与其它包由 pip 安装（避免 conda 求解过久/CUDA 组合冲突）。
+#
+# GPU（CUDA 11.1）完整安装：
+#   conda env create -f environment.yml
+#   conda activate centerpoint
+#   pip install spconv-cu111
+#
+# 若无 NVIDIA GPU，请在激活环境后改用 CPU 版 PyTorch：
+#   pip install -r requirements-pytorch-cpu.txt
+#   pip install -r requirements.txt
+#
+name: centerpoint
+channels:
+  - defaults
+dependencies:
+  - python=3.8
+  - pip
+  - pip:
+      - -r requirements-pytorch-cuda111.txt
+      - -r requirements.txt

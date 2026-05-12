@@ -11,6 +11,16 @@
       <input type="checkbox" :checked="selected" @change.stop="$emit('toggle-select', clip.clip_id)">
     </div>
 
+    <button
+      type="button"
+      :class="['clip-star-btn', { starred: clip.starred }]"
+      :title="clip.starred ? 'Unstar clip' : 'Star clip'"
+      :aria-pressed="!!clip.starred"
+      @click.stop="$emit('toggle-star', clip)"
+    >
+      <span class="clip-star-icon">{{ clip.starred ? '★' : '☆' }}</span>
+    </button>
+
     <div v-if="selected" class="selected-pill" aria-hidden="true">
       <span class="selected-pill__dot"></span>
       <span>Selected</span>
@@ -18,6 +28,10 @@
 
     <div class="preview-shell" @click.stop="$emit('preview', clip)">
       <img class="preview" loading="lazy" :alt="clip.clip_id" :src="imgSrc">
+      <div v-if="sceneLocation || sceneName" class="scene-chip" :title="sceneTooltip">
+        <span v-if="sceneLocation" class="scene-chip__loc">📍 {{ sceneLocation }}</span>
+        <span v-if="sceneName" class="scene-chip__name">{{ sceneName }}</span>
+      </div>
       <div class="preview-overlay">
         <div class="preview-overlay__eyebrow">Clip Preview</div>
       </div>
@@ -75,7 +89,7 @@ const props = defineProps({
   searchScope: { type: String, default: 'all' },
   fps: { type: Number, default: 3 },
 })
-defineEmits(['toggle-select', 'preview'])
+defineEmits(['toggle-select', 'preview', 'toggle-star'])
 
 const hoverFrames = ref(null)
 const hoverIdx = ref(0)
@@ -96,6 +110,12 @@ const displayTags = computed(() => {
     seen.add(key)
     return true
   })
+})
+const sceneLocation = computed(() => props.clip?.scene?.location || '')
+const sceneName = computed(() => props.clip?.scene?.scene_name || '')
+const sceneTooltip = computed(() => {
+  const desc = props.clip?.scene?.description || ''
+  return [sceneLocation.value, sceneName.value, desc].filter(Boolean).join(' · ')
 })
 const thumbnailSrc = computed(() => resolveImgSrc(props.clip.thumbnail_path))
 const imgSrc = ref(thumbnailSrc.value)
@@ -320,10 +340,53 @@ onMounted(() => {
     0 0 0 4px rgba(125, 211, 252, 0.14);
 }
 
-.selected-pill {
+.clip-star-btn {
   position: absolute;
   top: 12px;
   right: 12px;
+  z-index: 13;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 13, 22, 0.55);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(10px);
+  transition:
+    transform 0.18s var(--ease-out),
+    border-color 0.18s var(--ease-out),
+    background 0.18s var(--ease-out),
+    color 0.18s var(--ease-out),
+    box-shadow 0.22s var(--ease-out);
+}
+
+.clip-star-btn:hover {
+  transform: translateY(-1px) scale(1.04);
+  border-color: rgba(253, 224, 71, 0.55);
+  color: #fde047;
+}
+
+.clip-star-btn.starred {
+  color: #fde047;
+  background: linear-gradient(180deg, rgba(253, 224, 71, 0.28), rgba(234, 179, 8, 0.18));
+  border-color: rgba(253, 224, 71, 0.6);
+  box-shadow: 0 0 0 1px rgba(253, 224, 71, 0.18), 0 8px 22px rgba(253, 224, 71, 0.28);
+}
+
+.clip-star-btn.starred .clip-star-icon {
+  text-shadow: 0 0 8px rgba(253, 224, 71, 0.7), 0 0 18px rgba(253, 224, 71, 0.35);
+}
+
+.selected-pill {
+  position: absolute;
+  top: 12px;
+  right: 52px;
   z-index: 12;
   display: inline-flex;
   align-items: center;
@@ -383,6 +446,40 @@ onMounted(() => {
   background: linear-gradient(180deg, transparent, rgba(7, 11, 20, 0.72));
   color: #f4f8ff;
   pointer-events: none;
+}
+
+.scene-chip {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  max-width: calc(100% - 96px);
+  border-radius: 999px;
+  background: rgba(10, 13, 22, 0.62);
+  border: 1px solid rgba(125, 211, 252, 0.32);
+  color: #e0f2fe;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.scene-chip__loc {
+  color: #7dd3fc;
+}
+
+.scene-chip__name {
+  color: #cbd5e1;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .preview-overlay__eyebrow {

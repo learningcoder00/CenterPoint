@@ -28,6 +28,11 @@ def parse_args():
         help="Directory for generated metadata and HTML",
     )
     parser.add_argument(
+        "--meta-filename",
+        default="clips_meta.json",
+        help="JSON filename inside output-dir (use distinct names per infos .pkl for dataset switching)",
+    )
+    parser.add_argument(
         "--target-clips",
         type=int,
         default=150,
@@ -36,7 +41,7 @@ def parse_args():
     parser.add_argument(
         "--gap-threshold",
         type=float,
-        default=2.0,
+        default=10.0,
         help="Timestamp gap threshold in seconds for initial clip splitting",
     )
     parser.add_argument(
@@ -61,6 +66,21 @@ def parse_args():
         action="store_true",
         help="Serve the generated page after writing files",
     )
+    parser.add_argument(
+        "--no-scene-meta",
+        action="store_true",
+        help="Skip nuScenes devkit lookup for scene/location/description enrichment",
+    )
+    parser.add_argument(
+        "--nuscenes-dataroot",
+        default=None,
+        help="Override nuScenes data root (defaults to the directory containing the .pkl)",
+    )
+    parser.add_argument(
+        "--nuscenes-version",
+        default=None,
+        help="Override nuScenes version dir (defaults inferred from the .pkl filename)",
+    )
     return parser.parse_args()
 
 
@@ -68,6 +88,59 @@ def load_infos(infos_path):
     with open(infos_path, "rb") as f:
         infos = pickle.load(f)
     return sorted(infos, key=lambda x: x["timestamp"])
+
+
+def _infer_nuscenes_version(infos_path):
+    stem = Path(infos_path).stem.lower()
+    if "mini" in stem:
+        return "v1.0-mini"
+    if "test" in stem:
+        return "v1.0-test"
+    return "v1.0-trainval"
+
+
+def build_scene_map(infos, args):
+    """Return ``{sample_token: {scene_token, scene_name, location, description}}`` if devkit is available.
+
+    Falls back to an empty mapping with a printable reason; the JSON output then omits the ``scene``
+    block per clip so the frontend filter degrades gracefully.
+    """
+    if args.no_scene_meta:
+        return {}, "scene enrichment disabled via --no-scene-meta"
+
+    try:
+        from nuscenes.nuscenes import NuScenes  # type: ignore
+    except Exception as e:
+        return {}, f"nuscenes-devkit unavailable ({e})"
+
+    infos_path = Path(args.infos).resolve()
+    dataroot = Path(args.nuscenes_dataroot).resolve() if args.nuscenes_dataroot else infos_path.parent
+    version = args.nuscenes_version or _infer_nuscenes_version(infos_path)
+    meta_dir = dataroot / version
+    if not meta_dir.is_dir():
+        return {}, f"nuScenes meta dir missing: {meta_dir}"
+
+    try:
+        nusc = NuScenes(version=version, dataroot=str(dataroot), verbose=False)
+    except Exception as e:
+        return {}, f"NuScenes init failed: {e}"
+
+    log_loc = {log["token"]: log.get("location", "") for log in getattr(nusc, "log", [])}
+    scene_lookup = {}
+    for scene in getattr(nusc, "scene", []):
+        scene_lookup[scene["token"]] = {
+            "scene_token": scene["token"],
+            "scene_name": scene.get("name", ""),
+            "location": log_loc.get(scene.get("log_token", ""), ""),
+            "description": scene.get("description", ""),
+        }
+
+    sample_to_scene = {}
+    sample_tokens = {info["token"] for info in infos}
+    for sample in getattr(nusc, "sample", []):
+        if sample["token"] in sample_tokens:
+            sample_to_scene[sample["token"]] = scene_lookup.get(sample["scene_token"], {})
+    return sample_to_scene, None
 
 
 def split_by_gap(infos, gap_threshold):
@@ -121,9 +194,10 @@ def refine_clips(clips, target_clips, preferred_min_frames):
     return clips[:target_clips]
 
 
-def build_clip_payload(clips, output_dir):
+def build_clip_payload(clips, output_dir, scene_map=None):
     output_dir = Path(output_dir).resolve()
     payload_clips = []
+    scene_map = scene_map or {}
 
     for idx, clip in enumerate(clips):
         frames = []
@@ -142,20 +216,30 @@ def build_clip_payload(clips, output_dir):
 
         start_ts = float(clip[0]["timestamp"])
         end_ts = float(clip[-1]["timestamp"])
-        payload_clips.append(
-            {
-                "clip_id": f"clip_{idx + 1:03d}",
-                "clip_index": idx + 1,
-                "frame_count": len(clip),
-                "duration_s": round(end_ts - start_ts, 3),
-                "start_timestamp": start_ts,
-                "end_timestamp": end_ts,
-                "start_token": clip[0]["token"],
-                "end_token": clip[-1]["token"],
-                "thumbnail_path": frames[0]["image_path"],
-                "frames": frames,
+        clip_payload = {
+            "clip_id": f"clip_{idx + 1:03d}",
+            "clip_index": idx + 1,
+            "frame_count": len(clip),
+            "duration_s": round(end_ts - start_ts, 3),
+            "start_timestamp": start_ts,
+            "end_timestamp": end_ts,
+            "start_token": clip[0]["token"],
+            "end_token": clip[-1]["token"],
+            "thumbnail_path": frames[0]["image_path"],
+            "frames": frames,
+        }
+
+        # Attach nuScenes scene metadata (location / description) when available.
+        scene_info = scene_map.get(clip[0]["token"]) or scene_map.get(clip[-1]["token"])
+        if scene_info:
+            clip_payload["scene"] = {
+                "scene_token": scene_info.get("scene_token", ""),
+                "scene_name": scene_info.get("scene_name", ""),
+                "location": scene_info.get("location", ""),
+                "description": scene_info.get("description", ""),
             }
-        )
+
+        payload_clips.append(clip_payload)
 
     return payload_clips
 
@@ -165,22 +249,28 @@ def ensure_output_assets(output_dir):
     shutil.copyfile(TEMPLATE_HTML, output_dir / "index.html")
 
 
-def write_outputs(output_dir, metadata):
+def write_outputs(output_dir, metadata, meta_filename):
     ensure_output_assets(output_dir)
-    with open(output_dir / "clips_meta.json", "w", encoding="utf-8") as f:
+    meta_path = output_dir / meta_filename
+    with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
 
 
-def build_metadata(infos, clips, output_dir, args):
-    payload_clips = build_clip_payload(clips, output_dir)
+def build_metadata(infos, clips, output_dir, args, scene_map=None):
+    payload_clips = build_clip_payload(clips, output_dir, scene_map=scene_map)
+    src = Path(args.infos).resolve()
+    dataset_key = src.stem  # e.g. infos_val_10sweeps_withvelo_filter_True
     return {
-        "source_infos": str(Path(args.infos).resolve()),
+        "dataset_key": dataset_key,
+        "source_infos": str(src),
+        "clips_meta_file": args.meta_filename,
         "project_root": str(PROJECT_ROOT),
         "target_clips": args.target_clips,
         "gap_threshold": args.gap_threshold,
         "preferred_min_frames": args.preferred_min_frames,
         "total_frames": len(infos),
         "total_clips": len(payload_clips),
+        "scene_meta_enabled": bool(scene_map),
         "fps": 2,
         "clips": payload_clips,
     }
@@ -232,10 +322,17 @@ def main():
     final_clips = refine_clips(initial_clips, args.target_clips, args.preferred_min_frames)
     print_summary(initial_clips, final_clips)
 
-    metadata = build_metadata(infos, final_clips, output_dir, args)
-    write_outputs(output_dir, metadata)
+    scene_map, scene_warn = build_scene_map(infos, args)
+    if scene_map:
+        print(f"Scene enrichment: matched {len(scene_map)} samples to nuScenes scenes")
+    elif scene_warn:
+        print(f"Scene enrichment skipped: {scene_warn}")
 
-    print(f"Wrote: {output_dir / 'clips_meta.json'}")
+    meta_fn = args.meta_filename
+    metadata = build_metadata(infos, final_clips, output_dir, args, scene_map=scene_map)
+    write_outputs(output_dir, metadata, meta_fn)
+
+    print(f"Wrote: {output_dir / meta_fn}")
     print(f"Wrote: {output_dir / 'index.html'}")
 
     if args.serve:

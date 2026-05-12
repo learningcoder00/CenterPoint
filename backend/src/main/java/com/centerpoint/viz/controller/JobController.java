@@ -179,6 +179,29 @@ public class JobController {
         }
     }
 
+    /**
+     * Stop a pending/running job. Kills the active subprocess (if any) and wipes
+     * partial frames so a fresh submit starts clean. Final status='cancelled'.
+     */
+    @PostMapping("/{jobId}/cancel")
+    public ResponseEntity<?> cancelJob(@PathVariable String jobId) {
+        var result = jobService.cancelJob(jobId);
+        return switch (result) {
+            case NOT_FOUND -> ResponseEntity.status(404).body(Map.of("detail", "Job not found"));
+            case ALREADY_TERMINAL -> ResponseEntity.status(409).body(Map.of(
+                "detail", "Job is already in a terminal state (completed/failed/cancelled)."
+            ));
+            case DEQUEUED -> ResponseEntity.ok(Map.of(
+                "cancelled", jobId, "kind", "dequeued",
+                "message", "Removed from queue before execution."
+            ));
+            case KILLED_RUNNING -> ResponseEntity.ok(Map.of(
+                "cancelled", jobId, "kind", "killed_running",
+                "message", "Subprocess terminated and partial frames cleaned up."
+            ));
+        };
+    }
+
     @DeleteMapping("/{jobId}")
     public ResponseEntity<?> deleteJob(@PathVariable String jobId) {
         try {
@@ -191,6 +214,69 @@ public class JobController {
         } catch (IOException e) {
             return ResponseEntity.status(500).body(Map.of("detail", e.getMessage()));
         }
+    }
+
+    /**
+     * Bulk-delete endpoint used by the Results page batch toolbar.
+     *
+     * <p>Accepted bodies:
+     * <ul>
+     *   <li>{@code { "job_ids": ["id1", "id2", ...] }}</li>
+     *   <li>{@code { "filter": "all" | "stale" | "failed" | "completed" }}</li>
+     * </ul>
+     *
+     * <p>Returns counts so the UI can show a friendly summary. Errors on individual
+     * rows are collected, not aborted.
+     */
+    @PostMapping("/bulk-delete")
+    public ResponseEntity<?> bulkDelete(@RequestBody Map<String, Object> body) {
+        try {
+            Path jobsDir = props.projectRootPath().resolve(props.getJobsDir());
+            List<String> ids = collectBulkDeleteIds(body);
+            if (ids.isEmpty()) {
+                return ResponseEntity.status(400).body(Map.of(
+                    "detail", "No job ids resolved. Provide 'job_ids' (array) or 'filter' (all|stale|failed|completed)."
+                ));
+            }
+            JobService.BulkDeleteResult result = jobService.bulkDelete(ids, jobsDir);
+            Map<String, Object> resp = new LinkedHashMap<>();
+            resp.put("deleted", result.deleted());
+            resp.put("not_found", result.notFound());
+            resp.put("failed", result.failed());
+            resp.put("requested", ids.size());
+            if (!result.errors().isEmpty()) {
+                resp.put("errors", result.errors());
+            }
+            return ResponseEntity.ok(resp);
+        } catch (IOException e) {
+            return ResponseEntity.status(500).body(Map.of("detail", e.getMessage()));
+        }
+    }
+
+    /** Resolve the effective job_id list from either an explicit array or a server-side filter. */
+    private List<String> collectBulkDeleteIds(Map<String, Object> body) throws IOException {
+        if (body == null) return List.of();
+        Object raw = body.getOrDefault("job_ids", body.get("jobIds"));
+        if (raw instanceof Collection<?> c) {
+            List<String> ids = new ArrayList<>();
+            for (Object o : c) {
+                if (o == null) continue;
+                String s = String.valueOf(o).trim();
+                if (!s.isEmpty()) ids.add(s);
+            }
+            return ids;
+        }
+        Object filter = body.getOrDefault("filter", body.get("filter_status"));
+        if (filter == null) return List.of();
+        String f = String.valueOf(filter).trim().toLowerCase(Locale.ROOT);
+        List<Job> jobs = jobService.listJobs();
+        return switch (f) {
+            case "all" -> jobs.stream().map(Job::getJobId).toList();
+            case "stale" -> jobs.stream().filter(Job::isStale).map(Job::getJobId).toList();
+            case "failed", "completed", "pending", "running", "stitching", "cancelled" ->
+                jobs.stream().filter(j -> f.equals(j.getStatus())).map(Job::getJobId).toList();
+            default -> List.of();
+        };
     }
 
     @GetMapping("/{jobId}/video")

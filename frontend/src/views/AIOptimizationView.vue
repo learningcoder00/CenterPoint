@@ -291,8 +291,12 @@ async function removeOptimization(id) {
 onMounted(() => {
   const urlParams = new URLSearchParams(window.location.search)
   const jobId = urlParams.get('jobId')
+  const description = urlParams.get('description')
   if (jobId) {
     form.jobId = jobId
+  }
+  if (description) {
+    form.description = description
   }
   loadOptimizations()
 })
@@ -311,6 +315,13 @@ onMounted(() => {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  align-self: stretch;
+}
+
+.control-actions .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
 }
 
 .ai-layout {

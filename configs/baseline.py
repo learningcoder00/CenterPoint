@@ -85,7 +85,7 @@ test_cfg = dict(
 # dataset settings
 dataset_type = "NuScenesDataset"
 nsweeps = 10
-data_root = "/mnt/datasets/nuscenes/v1.0.0"
+data_root = "data/nuScenes"
 
 db_sampler = None
 
@@ -129,8 +129,8 @@ test_pipeline = [
     dict(type="Reformat"),
 ]
 
-train_anno = "/mnt/datasets/nuscenes/v1.0.0/infos_train_10sweeps_withvelo_filter_True.pkl"
-val_anno = "/mnt/datasets/nuscenes/v1.0.0/infos_val_10sweeps_withvelo_filter_True.pkl"
+train_anno = "data/nuScenes/infos_train_10sweeps_withvelo_filter_True.pkl"
+val_anno = "data/nuScenes/infos_val_10sweeps_withvelo_filter_True.pkl"
 test_anno = None
 
 data = dict(

@@ -201,6 +201,15 @@ public class JobRepository {
         );
     }
 
+    /** User-requested cancel: mark cancelled, preserve log snippet, also clear mp4_path. */
+    public void updateCancelled(String jobId, String reason) {
+        double now = System.currentTimeMillis() / 1000.0;
+        jdbc.update(
+            "UPDATE jobs SET status='cancelled', log=?, mp4_path=NULL, updated_at=? WHERE job_id=?",
+            reason, now, jobId
+        );
+    }
+
     public void updateStitching(String jobId, String log) {
         double now = System.currentTimeMillis() / 1000.0;
         jdbc.update(

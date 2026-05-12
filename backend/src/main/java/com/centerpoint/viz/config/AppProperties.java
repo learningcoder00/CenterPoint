@@ -13,6 +13,8 @@ public class AppProperties {
     private String jobsDir = "work_dirs/vis_jobs";
     private String clipsMeta = "clip_preview/clips_meta.json";
     private String vueDist = "frontend/dist";
+    private String siliconflowApiKey = "";
+    private String siliconflowBaseUrl = "https://api.siliconflow.cn/v1";
 
     public String getProjectRoot() { return projectRoot; }
     public void setProjectRoot(String v) { this.projectRoot = v; }
@@ -30,6 +32,10 @@ public class AppProperties {
     public void setClipsMeta(String v) { this.clipsMeta = v; }
     public String getVueDist() { return vueDist; }
     public void setVueDist(String v) { this.vueDist = v; }
+    public String getSiliconflowApiKey() { return siliconflowApiKey; }
+    public void setSiliconflowApiKey(String v) { this.siliconflowApiKey = v != null ? v : ""; }
+    public String getSiliconflowBaseUrl() { return siliconflowBaseUrl; }
+    public void setSiliconflowBaseUrl(String v) { this.siliconflowBaseUrl = v != null && !v.isBlank() ? v.trim() : "https://api.siliconflow.cn/v1"; }
 
     public java.nio.file.Path projectRootPath() {
         return java.nio.file.Paths.get(projectRoot);

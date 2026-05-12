@@ -7,6 +7,21 @@
     </div>
 
     <div class="stats">
+      <div class="stat dataset-select-wrap" v-if="clipsCatalog.length">
+        <span class="label">Dataset</span>
+        <select
+          class="dataset-select"
+          v-model="activeMetaRel"
+          :disabled="datasetSwitching"
+          @change="onDatasetChange"
+          title="clip_preview/clips_meta*.json (pre-generated per infos .pkl)"
+        >
+          <option v-for="item in clipsCatalog" :key="item.relative_path" :value="item.relative_path">
+            {{ datasetOptionLabel(item) }}
+          </option>
+        </select>
+      </div>
+
       <div class="stat">
         <span class="label">Clips</span>
         <span class="value">{{ allClips.length || '--' }}</span>
@@ -49,6 +64,24 @@
     </div>
 
     <div class="control-actions">
+      <label v-if="sceneOptions.length" class="scene-filter" title="Filter by nuScenes location (when available)">
+        <span class="scene-filter__label">📍 Scene</span>
+        <select v-model="sceneFilter" class="scene-filter__select">
+          <option value="">All scenes</option>
+          <option v-for="opt in sceneOptions" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </option>
+        </select>
+      </label>
+      <button
+        type="button"
+        :class="['btn-secondary', 'btn-star-filter', { active: starredOnly }]"
+        :title="starredOnly ? 'Show all clips' : 'Show only starred clips'"
+        @click="starredOnly = !starredOnly"
+      >
+        <span class="star-icon" :class="{ on: starredOnly }">{{ starredOnly ? '★' : '☆' }}</span>
+        Starred ({{ starredCount }})
+      </button>
       <button class="btn-secondary" @click="selectAllVisible">Select all visible</button>
       <button class="btn-secondary" @click="selectedIds.clear()">Clear selection</button>
     </div>
@@ -60,7 +93,10 @@
   </div>
   <div v-else-if="!filteredClips.length" class="empty">
     <div class="empty-icon">🎬</div>
-    <div class="empty-message">No clips match.</div>
+    <div class="empty-message">
+      <template v-if="starredOnly && !starredCount">No starred clips yet — tap the star on any clip to add it to your shortlist.</template>
+      <template v-else>No clips match.</template>
+    </div>
   </div>
   <div v-else class="grid">
     <ClipCard
@@ -73,6 +109,7 @@
       :fps="fps"
       @toggle-select="toggleSelect"
       @preview="openPreview"
+      @toggle-star="onToggleStar"
     />
   </div>
 
@@ -107,7 +144,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { fetchClips, fetchConfig, fetchTags } from '../api.js'
+import { fetchClips, fetchConfig, fetchTags, starClip, switchClipsMeta, unstarClip } from '../api.js'
 import { fuzzyScore } from '../utils.js'
 import ClipCard from '../components/ClipCard.vue'
 import PreviewModal from '../components/PreviewModal.vue'
@@ -117,9 +154,27 @@ const allClips = ref([])
 const loading = ref(true)
 const search = ref('')
 const searchScope = ref('all')
+const starredOnly = ref(false)
+const sceneFilter = ref('')
 const fps = ref(3)
 const selectedIds = reactive(new Set())
 const serverConfig = ref({})
+const activeMetaRel = ref('')
+const datasetSwitching = ref(false)
+const starredCount = computed(() => allClips.value.filter(c => c.starred).length)
+
+const sceneOptions = computed(() => {
+  const counts = new Map()
+  for (const c of allClips.value) {
+    const loc = c?.scene?.location
+    if (!loc) continue
+    counts.set(loc, (counts.get(loc) || 0) + 1)
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([value, count]) => ({ value, label: `${value} (${count})` }))
+})
+const clipsCatalog = computed(() => serverConfig.value.clips_meta_catalog || serverConfig.value.clipsMetaCatalog || [])
 const previewOpen = ref(false)
 const previewClipId = ref('')
 const showSubmit = ref(false)
@@ -149,10 +204,13 @@ const searchPlaceholder = computed(() => {
 })
 
 const filteredClips = computed(() => {
+  let base = allClips.value
+  if (starredOnly.value) base = base.filter(c => c.starred)
+  if (sceneFilter.value) base = base.filter(c => c?.scene?.location === sceneFilter.value)
   const q = search.value.trim()
-  if (!q) return allClips.value
+  if (!q) return base
   const results = []
-  for (const c of allClips.value) {
+  for (const c of base) {
     const idScore = searchScope.value === 'all' || searchScope.value === 'clip_id'
       ? fuzzyScore(c.clip_id, q)
       : 0
@@ -168,6 +226,23 @@ const filteredClips = computed(() => {
   results.sort((a, b) => b.score - a.score)
   return results.map(r => r.clip)
 })
+
+async function onToggleStar(clip) {
+  const wantStar = !clip.starred
+  const idx = allClips.value.findIndex(c => c.clip_id === clip.clip_id)
+  if (idx !== -1) {
+    allClips.value[idx] = { ...allClips.value[idx], starred: wantStar }
+  }
+  try {
+    if (wantStar) await starClip(clip.clip_id)
+    else await unstarClip(clip.clip_id)
+  } catch (e) {
+    if (idx !== -1) {
+      allClips.value[idx] = { ...allClips.value[idx], starred: !wantStar }
+    }
+    alert(`Star update failed: ${e?.message || e}`)
+  }
+}
 
 function toggleSelect(id) {
   if (selectedIds.has(id)) selectedIds.delete(id)
@@ -193,11 +268,46 @@ async function refreshTags(clipId) {
   }
 }
 
+function datasetOptionLabel(item) {
+  const dk = item.dataset_key ?? item.datasetKey
+  const fn = item.filename
+  const clips = item.total_clips != null ? ` (${item.total_clips} clips)` : ''
+  if (dk && fn) return `${dk} — ${fn}${clips}`
+  return `${fn || item.relative_path || item.relativePath || ''}${clips}`
+}
+
+async function onDatasetChange() {
+  const rel = activeMetaRel.value
+  if (!rel) return
+  datasetSwitching.value = true
+  try {
+    await switchClipsMeta(rel)
+    const [clipsData, cfgData] = await Promise.all([fetchClips(), fetchConfig()])
+    allClips.value = clipsData.clips || []
+    serverConfig.value = cfgData
+    activeMetaRel.value = cfgData.clips_meta_active || cfgData.clipsMetaActive || rel
+    selectedIds.clear()
+  } catch (e) {
+    console.error(e)
+    alert(e?.message || String(e))
+    try {
+      const cfgData = await fetchConfig()
+      serverConfig.value = cfgData
+      activeMetaRel.value = cfgData.clips_meta_active || cfgData.clipsMetaActive || ''
+    } catch {
+      // ignore
+    }
+  } finally {
+    datasetSwitching.value = false
+  }
+}
+
 onMounted(async () => {
   try {
     const [clipsData, cfgData] = await Promise.all([fetchClips(), fetchConfig()])
     allClips.value = clipsData.clips || []
     serverConfig.value = cfgData
+    activeMetaRel.value = cfgData.clips_meta_active || cfgData.clipsMetaActive || ''
   } catch {
     // loading state falls back to empty
   }
@@ -218,6 +328,91 @@ onMounted(async () => {
   height: 100%;
   display: inline-flex;
   align-items: center;
+}
+
+.scene-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.32));
+  border-radius: 12px;
+  background: var(--panel-alt, rgba(15, 23, 42, 0.45));
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.scene-filter__label {
+  font-weight: 800;
+  letter-spacing: .04em;
+  color: var(--muted);
+}
+
+.scene-filter__select {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+  cursor: pointer;
+  outline: none;
+}
+
+.scene-filter__select option {
+  background: var(--panel, #0f172a);
+  color: var(--text);
+}
+
+.btn-star-filter {
+  gap: 6px;
+}
+
+.btn-star-filter .star-icon {
+  font-size: 16px;
+  color: var(--muted);
+  transition: color .15s var(--ease-out);
+}
+
+.btn-star-filter .star-icon.on {
+  color: #fde047;
+  text-shadow: 0 0 8px rgba(253, 224, 71, 0.55);
+}
+
+.btn-star-filter.active {
+  background: linear-gradient(180deg, rgba(253, 224, 71, 0.22), rgba(234, 179, 8, 0.10));
+  border-color: rgba(253, 224, 71, 0.5);
+  color: #fde047;
+}
+
+.dataset-select-wrap {
+  min-width: 200px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.dataset-select-wrap .label {
+  align-self: flex-start;
+}
+
+.dataset-select {
+  width: 100%;
+  max-width: 380px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.35));
+  background: var(--panel-bg, rgba(15, 23, 42, 0.65));
+  color: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dataset-select:disabled {
+  opacity: 0.55;
+  cursor: wait;
 }
 
 .sel-bar {

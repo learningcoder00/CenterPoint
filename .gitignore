@@ -3,6 +3,10 @@
 **egg-info**
 **dist**
 data/
+datasets/
+*.tgz
+*.tar
+*.tar.gz
 *.pyc
 venv/
 *.idea/
@@ -18,3 +22,4 @@ node_modules/
 reference/
 clip_preview/
 docs/
+ppt/

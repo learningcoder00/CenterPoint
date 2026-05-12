@@ -110,8 +110,61 @@ public class JobService {
             j.setFrameCount((Integer) m.getOrDefault("frame_count", 0));
             j.setReviewStatus(reviewByJob.getOrDefault(j.getJobId(), "unreviewed"));
             j.setStarred(starredJobs.contains(j.getJobId()));
+            applyStaleFlag(j, meta);
         }
         return jobs;
+    }
+
+    private static void applyStaleFlag(Job j, Map<String, Map<String, Object>> meta) {
+        List<String> reasons = new ArrayList<>();
+        if (!meta.containsKey(j.getClipId())) {
+            reasons.add("clip not in active dataset");
+        }
+        if ("completed".equals(j.getStatus())) {
+            String mp4 = j.getMp4Path();
+            if (mp4 == null || mp4.isBlank()) {
+                reasons.add("mp4 path missing");
+            } else if (!Files.exists(Path.of(mp4))) {
+                reasons.add("mp4 file missing on disk");
+            }
+        }
+        if (reasons.isEmpty()) {
+            j.setStale(false);
+            j.setStaleReason("");
+        } else {
+            j.setStale(true);
+            j.setStaleReason(String.join("; ", reasons));
+        }
+    }
+
+    public record BulkDeleteResult(int deleted, int notFound, int failed, List<String> errors) {}
+
+    /**
+     * Delete every job whose id is in {@code jobIds}, swallowing per-job errors so a
+     * single bad row doesn't abort the batch. Returns counts for UI feedback.
+     */
+    public BulkDeleteResult bulkDelete(Collection<String> jobIds, Path jobsDir) {
+        int deleted = 0;
+        int notFound = 0;
+        int failed = 0;
+        List<String> errors = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>(jobIds);
+        for (String id : seen) {
+            if (id == null || id.isBlank()) {
+                continue;
+            }
+            try {
+                if (deleteJob(id, jobsDir)) {
+                    deleted++;
+                } else {
+                    notFound++;
+                }
+            } catch (Exception e) {
+                failed++;
+                errors.add(id + ": " + e.getMessage());
+            }
+        }
+        return new BulkDeleteResult(deleted, notFound, failed, errors);
     }
 
     public void starJob(String jobId) {
@@ -193,6 +246,11 @@ public class JobService {
             case "a", "b", "both" -> s;
             default -> "both";
         };
+    }
+
+    /** Stop a queued/running job. Wipes partial frames+mp4, marks status='cancelled'. */
+    public JobExecutor.CancelResult cancelJob(String jobId) {
+        return jobExecutor.cancel(jobId);
     }
 
     public boolean deleteJob(String jobId, Path jobsDir) throws IOException {

@@ -32,6 +32,12 @@ public class JobExecutor {
         r -> { Thread t = new Thread(r, "job-executor"); t.setDaemon(true); return t; }
     );
 
+    // Track live work so that we can cancel pending Futures or kill running Processes
+    // from a REST endpoint (POST /api/jobs/{id}/cancel).
+    private final Map<String, Future<?>> jobFutures = new ConcurrentHashMap<>();
+    private final Map<String, Process> runningProcesses = new ConcurrentHashMap<>();
+    private final Set<String> cancelledJobs = ConcurrentHashMap.newKeySet();
+
     public JobExecutor(AppProperties props, JobRepository jobRepo, ClipService clipService) {
         this.props = props;
         this.jobRepo = jobRepo;
@@ -60,14 +66,109 @@ public class JobExecutor {
         String checkpointB,
         String visualizationMode
     ) {
-        pool.submit(() -> {
+        Future<?> f = pool.submit(() -> {
             try {
                 executeJob(jobId, config, checkpoint, configB, checkpointB, visualizationMode);
             } catch (Exception e) {
                 log.error("Unexpected error in job {}", jobId, e);
-                jobRepo.updateFailed(jobId, "Internal error: " + e.getMessage());
+                if (cancelledJobs.contains(jobId)) {
+                    // Already marked cancelled by cancel(); don't overwrite with "failed".
+                } else {
+                    jobRepo.updateFailed(jobId, "Internal error: " + e.getMessage());
+                }
+            } finally {
+                runningProcesses.remove(jobId);
+                jobFutures.remove(jobId);
+                cancelledJobs.remove(jobId);
             }
         });
+        jobFutures.put(jobId, f);
+    }
+
+    /**
+     * Cancel a pending or running job. Behaviour:
+     * <ul>
+     *   <li>{@code pending} → remove from the executor queue, mark cancelled.</li>
+     *   <li>{@code running}/{@code stitching} → destroy the active subprocess
+     *       (graceful first, then force after 3s), then wipe partial frames
+     *       and stitched mp4 from the job directory so a re-submit starts clean.</li>
+     *   <li>terminal states ({@code completed}/{@code failed}/{@code cancelled})
+     *       → no-op, returns false.</li>
+     * </ul>
+     */
+    public CancelResult cancel(String jobId) {
+        var jobOpt = jobRepo.findById(jobId);
+        if (jobOpt.isEmpty()) return CancelResult.NOT_FOUND;
+        String status = jobOpt.get().getStatus();
+        if (status == null) return CancelResult.NOT_FOUND;
+        switch (status) {
+            case "completed":
+            case "failed":
+            case "cancelled":
+                return CancelResult.ALREADY_TERMINAL;
+            default:
+                break;
+        }
+
+        cancelledJobs.add(jobId);
+        Future<?> f = jobFutures.get(jobId);
+        Process p = runningProcesses.get(jobId);
+        boolean killedSomething = false;
+
+        if (p != null && p.isAlive()) {
+            p.destroy();
+            try {
+                if (!p.waitFor(3, TimeUnit.SECONDS)) {
+                    p.destroyForcibly();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                p.destroyForcibly();
+            }
+            killedSomething = true;
+        }
+        if (f != null && !f.isDone()) {
+            // Cancel without interrupting: the running thread is past readline() and
+            // will exit on the next tick once the subprocess pipe closes.
+            f.cancel(false);
+            killedSomething = true;
+        }
+
+        // Best-effort cleanup of frames + mp4 + concat file
+        try {
+            Path jobsDir = props.projectRootPath().resolve(props.getJobsDir());
+            Path jobDir = jobsDir.resolve(jobId);
+            wipePartialOutputs(jobDir, jobOpt.get().getClipId());
+        } catch (Exception cleanupErr) {
+            log.warn("Job {} cancel: partial cleanup failed: {}", jobId, cleanupErr.getMessage());
+        }
+
+        String reason = "Cancelled by user at " + java.time.LocalTime.now()
+            .truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        jobRepo.updateCancelled(jobId, reason);
+        log.info("Job {} cancelled (killedSubprocess={}, was status={})", jobId, killedSomething, status);
+        return killedSomething ? CancelResult.KILLED_RUNNING : CancelResult.DEQUEUED;
+    }
+
+    public enum CancelResult { NOT_FOUND, ALREADY_TERMINAL, DEQUEUED, KILLED_RUNNING }
+
+    /** Delete partial frames/mp4/concat after a cancel so a resubmit starts clean. */
+    private static void wipePartialOutputs(Path jobDir, String clipId) throws IOException {
+        if (!Files.isDirectory(jobDir)) return;
+        Path framesDir = jobDir.resolve("frames");
+        if (Files.isDirectory(framesDir)) {
+            try (var stream = Files.list(framesDir)) {
+                stream.filter(p -> {
+                    String n = p.getFileName().toString().toLowerCase();
+                    return n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png");
+                }).forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
+            }
+        }
+        Path concat = jobDir.resolve("concat.txt");
+        Files.deleteIfExists(concat);
+        if (clipId != null && !clipId.isBlank()) {
+            Files.deleteIfExists(jobDir.resolve(clipId + ".mp4"));
+        }
     }
 
     private void executeJob(
@@ -121,6 +222,16 @@ public class JobExecutor {
             visCmd.add("--checkpoint-b"); visCmd.add(checkpointB);
         }
         visCmd.add("--output-dir"); visCmd.add(framesDir.toString());
+
+        // Per-clip mini infos pkl cache (avoids the multi-hour full infos_val_*.pkl build
+        // — see tools/visualize_results.py --mini-infos-cache). Shared across jobs so that
+        // re-running the same clip is instant after the first call.
+        Path miniCacheDir = projectRoot.resolve("work_dirs").resolve(".mini_infos_cache");
+        try {
+            Files.createDirectories(miniCacheDir);
+        } catch (Exception ignore) {}
+        visCmd.add("--mini-infos-cache"); visCmd.add(miniCacheDir.toString());
+
         visCmd.add("--tokens");
         visCmd.addAll(tokens);
 
@@ -140,6 +251,7 @@ public class JobExecutor {
         visPb.environment().putAll(env);
 
         Process visProc = visPb.start();
+        runningProcesses.put(jobId, visProc);
         int completedFrames = 0;
 
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(visProc.getInputStream()))) {
@@ -155,6 +267,11 @@ public class JobExecutor {
         }
 
         int visExit = visProc.waitFor();
+        runningProcesses.remove(jobId);
+        if (cancelledJobs.contains(jobId)) {
+            log.info("Job {} aborted after inference (user cancel).", jobId);
+            return;
+        }
         if (visExit != 0) {
             jobRepo.updateFailed(jobId, tail(logLines, 200));
             return;
@@ -203,6 +320,7 @@ public class JobExecutor {
         ffPb.redirectErrorStream(true);
 
         Process ffProc = ffPb.start();
+        runningProcesses.put(jobId, ffProc);
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(ffProc.getInputStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -211,6 +329,11 @@ public class JobExecutor {
         }
 
         int ffExit = ffProc.waitFor();
+        runningProcesses.remove(jobId);
+        if (cancelledJobs.contains(jobId)) {
+            log.info("Job {} aborted during stitching (user cancel).", jobId);
+            return;
+        }
         if (ffExit != 0) {
             jobRepo.updateFailed(jobId, tail(logLines, 200));
             return;

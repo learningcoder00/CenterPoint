@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.*;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,15 +22,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/api/ai")
 public class AIController {
 
-    private static final String API_KEY = "sk-rzmjeiojhwgckpeqvmlosrfxiqomrbrbgnorknevixufcjae";
-    private static final String API_BASE_URL = "https://api.siliconflow.cn/v1";
-    private static final String UPLOAD_URL = "https://api.siliconflow.cn/v1/files";
     private final JobRepository jobRepository;
     private final AIOptimizationRepository aiOptimizationRepository;
     private final AppProperties props;
@@ -38,6 +37,19 @@ public class AIController {
         this.jobRepository = jobRepository;
         this.aiOptimizationRepository = aiOptimizationRepository;
         this.props = props;
+    }
+
+    private String siliconflowBaseUrl() {
+        String base = props.getSiliconflowBaseUrl();
+        if (base == null || base.isBlank()) {
+            return "https://api.siliconflow.cn/v1";
+        }
+        base = base.trim();
+        return base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
+    }
+
+    private String siliconflowUploadUrl() {
+        return siliconflowBaseUrl() + "/files";
     }
 
     private String buildConfigContext(Optional<Job> jobOptional) {
@@ -86,10 +98,10 @@ public class AIController {
         }
         
         // 创建HTTP连接
-        URL url = new URL(UPLOAD_URL);
+        URL url = URI.create(siliconflowUploadUrl()).toURL();
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
-        connection.setRequestProperty("Authorization", "Bearer " + API_KEY);
+        connection.setRequestProperty("Authorization", "Bearer " + props.getSiliconflowApiKey());
         connection.setDoOutput(true);
         
         // 构建请求体
@@ -176,7 +188,17 @@ public class AIController {
 
         Optional<Job> jobOptional = jobRepository.findById(jobId);
         String clipId = jobOptional.map(Job::getClipId).orElse(null);
-        
+
+        String configuredKey = props.getSiliconflowApiKey();
+        if (configuredKey == null || configuredKey.isBlank()) {
+            Map<String, String> err = new HashMap<>();
+            err.put("response",
+                "未配置 SiliconFlow API Key。请设置环境变量 SILICONFLOW_API_KEY，或在 application.yml / 启动参数中配置 app.siliconflow-api-key 后再试。");
+            HttpHeaders errHeaders = new HttpHeaders();
+            errHeaders.setContentType(new MediaType("application", "json", StandardCharsets.UTF_8));
+            return new ResponseEntity<>(err, errHeaders, HttpStatus.SERVICE_UNAVAILABLE);
+        }
+
         String response;
         try {
             System.out.println("开始调用AI优化建议API...");
@@ -255,15 +277,16 @@ public class AIController {
             System.out.println("描述文本: " + descriptionText);
             System.out.println("转义后的描述: " + escapedDescription);
             
-            System.out.println("请求URL: " + API_BASE_URL + "/chat/completions");
+            String completionsUrl = siliconflowBaseUrl() + "/chat/completions";
+            System.out.println("请求URL: " + completionsUrl);
             System.out.println("请求体: " + requestBody);
 
             // 创建HTTP连接
-            URL url = new URL(API_BASE_URL + "/chat/completions");
+            URL url = URI.create(completionsUrl).toURL();
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("POST");
             connection.setRequestProperty("Content-Type", "application/json");
-            connection.setRequestProperty("Authorization", "Bearer " + API_KEY);
+            connection.setRequestProperty("Authorization", "Bearer " + configuredKey);
             connection.setDoOutput(true);
             connection.setConnectTimeout(60000); // 60秒超时
             connection.setReadTimeout(120000); // 120秒读取超时
@@ -303,13 +326,17 @@ public class AIController {
                 // 成功响应，使用Jackson解析JSON
                 try {
                     ObjectMapper responseMapper = new ObjectMapper();
-                    Map<String, Object> responseMap = responseMapper.readValue(responseStr, Map.class);
-                    // choices是一个数组，获取第一个元素
-                    List<Map<String, Object>> choicesList = (List<Map<String, Object>>) responseMap.get("choices");
+                    Map<String, Object> responseMap = responseMapper.readValue(
+                        responseStr, new TypeReference<Map<String, Object>>() {});
+                    List<Map<String, Object>> choicesList = responseMapper.convertValue(
+                        responseMap.get("choices"), new TypeReference<List<Map<String, Object>>>() {});
                     if (choicesList != null && !choicesList.isEmpty()) {
                         Map<String, Object> choicesMap = choicesList.get(0);
-                        Map<String, Object> messageMap = (Map<String, Object>) choicesMap.get("message");
-                        response = (String) messageMap.get("content");
+                        Map<String, Object> messageMap = responseMapper.convertValue(
+                            choicesMap.get("message"), new TypeReference<Map<String, Object>>() {});
+                        Object messageContent = messageMap.get("content");
+                        response = messageContent instanceof String s ? s
+                            : (messageContent != null ? messageContent.toString() : null);
                         System.out.println("解析后的响应: " + response);
                     } else {
                         response = responseStr;

@@ -14,6 +14,8 @@
       </div>
     </section>
 
+    <ReviewDashboard :jobs="allJobs" :clips-tags="clipsTagMap" />
+
     <section class="tabs" role="tablist" aria-label="Review filter">
       <button
         v-for="t in tabDefs"
@@ -71,10 +73,11 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fetchJobs, deleteJob, starJob, unstarJob } from '../api.js'
+import { fetchClips, fetchJobs, deleteJob, starJob, unstarJob } from '../api.js'
 import JobCard from '../components/JobCard.vue'
 import VideoModal from '../components/VideoModal.vue'
 import LogModal from '../components/LogModal.vue'
+import ReviewDashboard from '../components/ReviewDashboard.vue'
 
 const tabDefs = [
   { id: 'issues', label: 'Issues', icon: '⚠' },
@@ -87,6 +90,7 @@ const route = useRoute()
 const router = useRouter()
 
 const allJobs = ref([])
+const clipsTagMap = ref({})
 const loading = ref(true)
 const refreshing = ref(false)
 const search = ref('')
@@ -168,6 +172,17 @@ async function load(silent = false) {
   if (!silent) loading.value = false
 }
 
+async function loadClipTags() {
+  try {
+    const data = await fetchClips()
+    const map = {}
+    for (const c of (data.clips || [])) {
+      if (c?.clip_id) map[c.clip_id] = Array.isArray(c.tags) ? c.tags : []
+    }
+    clipsTagMap.value = map
+  } catch { /* dashboard degrades gracefully */ }
+}
+
 async function onRefresh() {
   if (refreshing.value) return
   refreshing.value = true
@@ -237,6 +252,7 @@ function onKeydown(e) {
 onMounted(() => {
   if (!tabDefs.some(t => t.id === activeTab.value)) activeTab.value = 'issues'
   load()
+  loadClipTags()
   window.addEventListener('keydown', onKeydown)
 })
 

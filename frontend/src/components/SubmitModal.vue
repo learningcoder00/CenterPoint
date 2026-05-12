@@ -295,13 +295,15 @@ async function doSubmit() {
     )
     const reused = data.reused_count ?? data.jobs.filter(j => j.reused).length
     const fresh = data.new_count ?? (data.jobs.length - reused)
+    const targetRoute = isCompareMode.value ? '/compare' : '/results'
+    const targetName = isCompareMode.value ? 'Compare' : 'Results'
     const breakdown = reused > 0
-      ? `Reused ${reused}, queued ${fresh} new. Redirecting to Results…`
-      : `Submitted ${fresh} job(s). Redirecting to Results…`
+      ? `Reused ${reused}, queued ${fresh} new. Redirecting to ${targetName}…`
+      : `Submitted ${fresh} job(s). Redirecting to ${targetName}…`
     statusMsg.value = breakdown
     statusType.value = 'ok'
     emit('submitted')
-    setTimeout(() => { emit('close'); router.push('/results') }, 1500)
+    setTimeout(() => { emit('close'); router.push(targetRoute) }, 1500)
   } catch (e) {
     statusMsg.value = `Submit failed: ${e.message}`
     statusType.value = 'error'

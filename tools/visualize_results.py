@@ -605,8 +605,10 @@ def visualize_sample(token, detection, info, data_root, output_dir,
 
         base_title_a, base_title_b = (bev_titles or ("A", "B"))
         # Append per-frame detection counts so visual diff is obvious at a glance.
-        title_a = f"{base_title_a}  ·  {len(detections)} dets"
-        title_b = f"{base_title_b}  ·  {len(detections_b)} dets"
+        # Note: cv2.putText (Hershey font) only renders ASCII; non-ASCII separators
+        # like U+00B7 render as "??", so keep this string in plain ASCII.
+        title_a = f"{base_title_a}  |  {len(detections)} dets"
+        title_b = f"{base_title_b}  |  {len(detections_b)} dets"
         bev_a = draw_bev(detections, bev_range, title=title_a)
         bev_b = draw_bev(detections_b, bev_range, title=title_b)
 
@@ -650,6 +652,37 @@ def visualize_sample(token, detection, info, data_root, output_dir,
         dt = datetime.datetime.fromtimestamp(timestamp)
         ts_str = f"  ts={dt.strftime('%H:%M:%S.%f')[:-3]}"
     print(f"  Saved: {out_path}  ({n_det} detections){ts_str}")
+
+
+def _ensure_mini_infos_pkl(tokens, cache_dir, dataroot, version="v1.0-trainval",
+                           nsweeps=10, filter_zero=True):
+    """Build (or reuse) a per-clip mini infos pkl for the given sample tokens.
+
+    Cache key = SHA1 of sorted tokens. If the cached pkl exists, skip the heavy
+    nuScenes devkit load and just return its path. Otherwise call
+    `nusc_common.create_mini_val_infos` to build it (~2-3 min cold cost mostly
+    dominated by reading nuScenes JSON metadata tables; the per-token work
+    itself is fractions of a second).
+    """
+    import hashlib
+    os.makedirs(cache_dir, exist_ok=True)
+    key = hashlib.sha1("\n".join(sorted(tokens)).encode("utf-8")).hexdigest()[:12]
+    pkl_path = os.path.join(cache_dir, f"mini_infos_{key}.pkl")
+    if os.path.exists(pkl_path):
+        print(f"[mini_infos] cache hit: {pkl_path} ({len(tokens)} tokens)")
+        return pkl_path
+    print(f"[mini_infos] cache miss; building mini pkl for {len(tokens)} tokens "
+          f"(dataroot={dataroot}, version={version}) ...")
+    from det3d.datasets.nuscenes.nusc_common import create_mini_val_infos
+    create_mini_val_infos(
+        root_path=dataroot,
+        sample_tokens=tokens,
+        output_path=pkl_path,
+        version=version,
+        nsweeps=nsweeps,
+        filter_zero=filter_zero,
+    )
+    return pkl_path
 
 
 def run_inference(cfg, checkpoint_path, max_samples=-1, tokens=None):
@@ -752,6 +785,18 @@ def main():
     parser.add_argument("--visualization-mode", default="bev_cameras",
                         choices=["bev_cameras", "forward_points", "bev_compare"],
                         help="Visualization layout: BEV+6 cameras, forward point cloud, or A/B BEV compare")
+
+    parser.add_argument("--mini-infos-cache", default=None,
+                        help=("Directory for on-the-fly per-clip mini infos pkls. When set + "
+                              "--tokens given, the script builds (and caches by token-set hash) "
+                              "a minimal infos pkl using nuScenes devkit, then overrides "
+                              "cfg.data.val.info_path with it. Avoids the full ~50-min "
+                              "infos_val_*.pkl build when you only need a handful of frames."))
+    parser.add_argument("--nusc-version", default="v1.0-trainval",
+                        help="nuScenes devkit version used when --mini-infos-cache is active.")
+    parser.add_argument("--nusc-dataroot", default=None,
+                        help=("nuScenes dataroot used when --mini-infos-cache is active. "
+                              "Defaults to cfg.data_root or --data-root."))
     args = parser.parse_args()
 
     use_inference = args.config is not None and args.checkpoint is not None
@@ -776,6 +821,17 @@ def main():
     if use_inference:
         cfg = Config.fromfile(args.config)
         data_root = cfg.data_root if hasattr(cfg, "data_root") else args.data_root
+
+        if args.mini_infos_cache and args.tokens:
+            mini_pkl = _ensure_mini_infos_pkl(
+                tokens=args.tokens,
+                cache_dir=args.mini_infos_cache,
+                dataroot=args.nusc_dataroot or data_root,
+                version=args.nusc_version,
+            )
+            cfg.data.val.info_path = mini_pkl
+            print(f"[mini_infos] cfg.data.val.info_path -> {mini_pkl}")
+
         predictions, infos_list = run_inference(
             cfg, args.checkpoint,
             max_samples=args.max_samples, tokens=args.tokens,
@@ -783,6 +839,9 @@ def main():
 
         if is_compare:
             cfg_b = Config.fromfile(args.config_b)
+            if args.mini_infos_cache and args.tokens:
+                cfg_b.data.val.info_path = cfg.data.val.info_path
+                print(f"[mini_infos] cfg_b.data.val.info_path -> {cfg_b.data.val.info_path}")
             print("\n[bev_compare] Running side-B inference ...")
             predictions_b, _infos_b = run_inference(
                 cfg_b, args.checkpoint_b,

@@ -24,6 +24,14 @@ public class Job {
     private String reviewStatus = "unreviewed";
     /** Per-job favorite (not persisted on Job row; filled in list response). */
     private boolean starred;
+    /**
+     * True when this job's underlying data appears to be out of date: either the
+     * referenced clip is no longer in the active {@code clips_meta}, or a previously
+     * generated MP4 has been removed from disk. Useful for batch-cleanup in the UI.
+     */
+    private boolean stale;
+    /** Short human-readable reason for {@link #stale}, empty when not stale. */
+    private String staleReason = "";
 
     public String getJobId() { return jobId; }
     public void setJobId(String v) { this.jobId = v; }
@@ -63,4 +71,10 @@ public class Job {
 
     public boolean isStarred() { return starred; }
     public void setStarred(boolean starred) { this.starred = starred; }
+
+    public boolean isStale() { return stale; }
+    public void setStale(boolean stale) { this.stale = stale; }
+
+    public String getStaleReason() { return staleReason; }
+    public void setStaleReason(String staleReason) { this.staleReason = staleReason == null ? "" : staleReason; }
 }

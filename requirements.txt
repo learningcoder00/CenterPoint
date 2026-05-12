@@ -1,27 +1,34 @@
-# numba 暂时注释，Python 3.14 不兼容
-# numba                                                                                                      
-matplotlib                                                                                                 
-fire                                                                                                       
-protobuf                                                                                                   
-opencv-python                                                                                              
-opencv-contrib-python                                                                                      
-pybind11                                                                                                                                                                                                                                                                                                              
-easydict                                                                                                   
-# open3d-python 暂时注释，可能不兼容
-# open3d-python                                                                                              
-terminaltables                                                                                             
-pytest-runner                                                                                              
-addict                                                                                                     
-pycocotools                                                                                                
-# imagecorruptions 暂时注释
-# imagecorruptions                                                                                           
-objgraph                                                                                                   
+# ---------------------------------------------------------------------------
+# CenterPoint / det3d / nuScenes 工具链 — pip 依赖
+#
+# 请先安装 PyTorch（版本需与 CUDA 一致），再用 pip 安装本文件：
+#   conda install pytorch==1.9.0 torchvision==0.10.0 cudatoolkit=11.1 -c pytorch -c nvidia
+# Windows 仅 CPU 时可：
+#   conda install pytorch==1.9.0 torchvision==0.10.0 cpuonly -c pytorch
+#
+# VoxelNet 骨干需要 spconv，CUDA 11.1 示例：
+#   pip install spconv-cu111
+# 其它 CUDA 版本参见：https://github.com/traveller59/spconv
+#
+# 编译 det3d CUDA 扩展前需已安装对应 CUDA 工具链与 MSVC（Windows）或 gcc（Linux）。
+# ---------------------------------------------------------------------------
+
+fire
+protobuf
+opencv-python
+pybind11
+easydict
+terminaltables
+pytest-runner
+addict
+pycocotools
+objgraph
 cachetools
 descartes
 jupyter
 matplotlib
 motmetrics<=1.1.3
-numpy
+numpy>=1.19,<1.24
 pandas>=0.24
 Pillow
 pyquaternion>=0.9.5
@@ -31,3 +38,11 @@ tqdm
 pyyaml
 requests
 nuscenes-devkit==1.0.5
+numba
+tensorboardX
+setuptools
+wheel
+
+# 可选：训练数据增强 / 点云可视化（按需取消注释）
+# imagecorruptions
+# open3d-python

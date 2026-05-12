@@ -33,6 +33,14 @@ export async function fetchConfig() {
   return request('/api/config')
 }
 
+export async function switchClipsMeta(relativePath) {
+  return request('/api/config/clips-meta', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ relative_path: relativePath }),
+  })
+}
+
 export async function submitJobs(
   clipIds,
   config,
@@ -64,6 +72,27 @@ export async function deleteJob(jobId) {
   return request(`/api/jobs/${jobId}`, { method: 'DELETE' })
 }
 
+/** Stop a running/pending job. Kills subprocess, wipes partial frames, marks status='cancelled'. */
+export async function cancelJob(jobId) {
+  return request(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' })
+}
+
+/**
+ * Bulk-delete jobs by explicit id list (preferred) or by a server-side filter.
+ * Pass either `{ jobIds: [...] }` or `{ filter: 'all'|'stale'|'failed'|'completed' }`.
+ * The server returns `{ deleted, not_found, failed, requested, errors? }`.
+ */
+export async function bulkDeleteJobs({ jobIds, filter } = {}) {
+  const body = {}
+  if (Array.isArray(jobIds) && jobIds.length) body.job_ids = jobIds
+  if (filter) body.filter = filter
+  return request('/api/jobs/bulk-delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 export async function fetchJobReview(jobId) {
   return request(`/api/jobs/${jobId}/review`)
 }
@@ -82,6 +111,14 @@ export async function starJob(jobId) {
 
 export async function unstarJob(jobId) {
   return request(`/api/jobs/${encodeURIComponent(jobId)}/star`, { method: 'DELETE' })
+}
+
+export async function starClip(clipId) {
+  return request(`/api/clips/${encodeURIComponent(clipId)}/star`, { method: 'POST' })
+}
+
+export async function unstarClip(clipId) {
+  return request(`/api/clips/${encodeURIComponent(clipId)}/star`, { method: 'DELETE' })
 }
 
 export async function submitAIOptimization(jobId, description) {

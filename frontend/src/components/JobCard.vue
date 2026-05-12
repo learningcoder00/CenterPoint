@@ -1,5 +1,21 @@
 <template>
-  <article :class="['card', { clickable: job.status === 'completed' }]" @click="cardClick">
+  <article
+    :class="['card', { clickable: job.status === 'completed', 'card--selected': selected, 'card--stale': job.stale }]"
+    @click="cardClick"
+  >
+    <label
+      v-if="selectable"
+      class="card-select"
+      :title="selected ? 'Unselect this job' : 'Select this job'"
+      @click.stop
+    >
+      <input
+        type="checkbox"
+        :checked="selected"
+        @click.stop
+        @change="$emit('toggle-select', job.job_id)"
+      >
+    </label>
     <div class="card-image">
       <img class="thumb" loading="lazy" :src="resolveImgSrc(job.thumbnail_path)" :alt="job.clip_id">
       <button
@@ -20,6 +36,13 @@
         {{ reviewLabel }}
       </div>
       <div :class="['status-badge', job.status]">{{ fmtStatus(job.status) }}</div>
+      <div
+        v-if="job.stale"
+        class="stale-badge"
+        :title="job.stale_reason || 'Underlying clip or MP4 is missing — safe to delete.'"
+      >
+        ⚠ Stale
+      </div>
       <div
         v-if="isInterruptedFailure"
         class="interrupted-badge"
@@ -80,9 +103,27 @@
           <span class="btn-icon">▶</span>
           Play
         </button>
+        <button
+          v-if="isActive"
+          class="btn-secondary cancel-btn"
+          :title="job.status === 'pending' ? 'Remove from queue' : 'Stop inference + clear partial frames'"
+          @click.stop="$emit('cancel', job.job_id)"
+        >
+          <span class="btn-icon">⏸</span>
+          {{ job.status === 'pending' ? 'Dequeue' : 'Pause' }}
+        </button>
         <button class="btn-secondary" @click.stop="$emit('show-log', job)">
           <span class="btn-icon">📋</span>
           Log
+        </button>
+        <button
+          v-if="job.status === 'completed'"
+          class="btn-secondary ai-btn"
+          title="Ask AI for optimization suggestions"
+          @click.stop="askAi"
+        >
+          <span class="btn-icon">✨</span>
+          Ask AI
         </button>
         <button
           class="btn-secondary delete-btn"
@@ -99,15 +140,30 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { fmtStatus, fmtTime } from '../utils.js'
 
 const props = defineProps({
   job: Object,
   showReview: { type: Boolean, default: false },
   showStarToggle: { type: Boolean, default: false },
+  selectable: { type: Boolean, default: false },
+  selected: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['play-video', 'show-log', 'delete', 'toggle-star'])
+const emit = defineEmits(['play-video', 'show-log', 'delete', 'toggle-star', 'toggle-select', 'cancel'])
+
+const isActive = computed(() => ['pending', 'running', 'stitching'].includes(props.job?.status))
+
+const router = useRouter()
+
+function askAi() {
+  if (!props.job?.job_id) return
+  const query = { jobId: props.job.job_id }
+  const note = props.job.reviewer_note
+  if (note) query.description = note
+  router.push({ path: '/ai-optimization', query })
+}
 
 const reviewClass = computed(() => {
   const s = props.job?.review_status || 'unreviewed'
@@ -137,6 +193,10 @@ function resolveImgSrc(path) {
 }
 
 function cardClick() {
+  if (props.selectable) {
+    emit('toggle-select', props.job.job_id)
+    return
+  }
   if (props.job.status === 'completed') {
     emit('play-video', props.job)
   }
@@ -351,6 +411,23 @@ function formatVisualizationMode(mode) {
   border: 1px solid rgba(220, 53, 69, 0.24);
 }
 
+.status-badge.cancelled {
+  background: rgba(251, 146, 60, 0.14);
+  color: #fb923c;
+  border: 1px solid rgba(251, 146, 60, 0.3);
+}
+
+.cancel-btn {
+  background: rgba(251, 146, 60, 0.08);
+  border-color: rgba(251, 146, 60, 0.3);
+  color: #fb923c;
+}
+
+.cancel-btn:hover {
+  background: rgba(251, 146, 60, 0.18);
+  border-color: rgba(251, 146, 60, 0.5);
+}
+
 .interrupted-badge {
   position: absolute;
   top: 56px;
@@ -367,6 +444,63 @@ function formatVisualizationMode(mode) {
   box-shadow: 0 6px 18px rgba(220, 38, 38, 0.32);
   cursor: help;
   backdrop-filter: blur(8px);
+}
+
+.stale-badge {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 2;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  color: #1f2937;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.95), rgba(249, 115, 22, 0.85));
+  border: 1px solid rgba(254, 240, 138, 0.55);
+  box-shadow: 0 6px 18px rgba(180, 83, 9, 0.36);
+  cursor: help;
+}
+
+.card-select {
+  position: absolute;
+  top: 10px;
+  right: 60px;
+  z-index: 4;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: rgba(10, 13, 22, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transition: border-color .18s var(--ease-out), background .18s var(--ease-out);
+}
+
+.card-select:hover {
+  border-color: var(--accent);
+}
+
+.card-select input[type=checkbox] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.card--selected {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 2px rgba(125, 211, 252, .25),
+    0 14px 30px rgba(22, 38, 68, 0.18);
+}
+
+.card--stale {
+  border-color: rgba(251, 191, 36, 0.55);
 }
 
 .compare-badge {
@@ -501,6 +635,19 @@ function formatVisualizationMode(mode) {
   color: var(--danger);
   border-color: var(--danger);
   background: rgba(220, 53, 69, 0.08);
+}
+
+.ai-btn {
+  background: linear-gradient(180deg, rgba(192, 132, 252, 0.18), rgba(192, 132, 252, 0.06));
+  border-color: rgba(192, 132, 252, 0.40);
+  color: #ddd6fe;
+}
+
+.ai-btn:hover {
+  background: linear-gradient(180deg, rgba(192, 132, 252, 0.28), rgba(192, 132, 252, 0.12));
+  border-color: rgba(192, 132, 252, 0.65);
+  color: #ede9fe;
+  transform: translateY(-1px);
 }
 
 .btn-icon {

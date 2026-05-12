@@ -3,6 +3,26 @@ import logging
 
 from det3d.utils.config_tool import get_downsample_factor
 
+# ---------------------------------------------------------------------------
+# NOTE on backbone (Windows compatibility patch):
+#   The original LION/Mamba backbone (`LIONBackboneCenterPoint`) needs the
+#   `mamba_ssm` Python package, which currently has no Windows wheel. To keep
+#   this config runnable on Windows we swap it for `SpMiddleResNetFHD` (the
+#   same backbone baseline.py uses) and bumped the RPN input from 128 -> 256.
+#
+#   Checkpoint pairing on this machine:
+#     - `work_dirs/final/final.pth` was trained with the LION backbone, so its
+#       backbone/neck weights DO NOT match the patched architecture and the
+#       inference output will be effectively random.
+#     - For meaningful results pair this config with `work_dirs/baseline/
+#       epoch_20.pth` (or any other SpMiddleResNet-trained checkpoint).
+#       Realistically the patched config becomes baseline-equivalent.
+#
+#   To restore the real LION variant later: install `mamba_ssm`, uncomment the
+#   LIONBackboneCenterPoint dict below, comment out the SpConv one, and set
+#   `num_input_features=128` back on the RPN.
+# ---------------------------------------------------------------------------
+
 tasks = [
     dict(num_class=1, class_names=["car"]),
     dict(num_class=2, class_names=["truck", "construction_vehicle"]),
@@ -27,29 +47,34 @@ model = dict(
         type="VoxelFeatureExtractorV3",
         num_input_features=5,
     ),
+    # Active backbone: SpConv (works without mamba_ssm). Comment this out and
+    # uncomment the LION block below if/when mamba_ssm is installed.
     backbone=dict(
-        type="LIONBackboneCenterPoint",
-        num_input_features=5,
-        ds_factor=8,
-        feature_dim=128,
-        layer_dim=[128, 128, 128, 128],
-        num_layers=4,
-        depths=[2, 2, 2, 2],
-        layer_down_scales=[
-            [[2, 2, 2], [2, 2, 2]],
-            [[2, 2, 2], [2, 2, 2]],
-            [[2, 2, 2], [2, 2, 2]],
-            [[2, 2, 2], [2, 2, 2]],
-        ],
-        window_shape=[[13, 13, 11], [13, 13, 6], [13, 13, 3], [13, 13, 2]],
-        group_size=[4096, 2048, 1024, 512],
-        direction=["x", "y"],
-        diff_scale=0.2,
-        diffusion=True,
-        shift=True,
-        operator_name="Mamba",
-        operator_cfg=dict(d_state=16, d_conv=4, expand=2, drop_path=0.2),
+        type="SpMiddleResNetFHD", num_input_features=5, ds_factor=8,
     ),
+    # backbone=dict(
+    #     type="LIONBackboneCenterPoint",
+    #     num_input_features=5,
+    #     ds_factor=8,
+    #     feature_dim=128,
+    #     layer_dim=[128, 128, 128, 128],
+    #     num_layers=4,
+    #     depths=[2, 2, 2, 2],
+    #     layer_down_scales=[
+    #         [[2, 2, 2], [2, 2, 2]],
+    #         [[2, 2, 2], [2, 2, 2]],
+    #         [[2, 2, 2], [2, 2, 2]],
+    #         [[2, 2, 2], [2, 2, 2]],
+    #     ],
+    #     window_shape=[[13, 13, 11], [13, 13, 6], [13, 13, 3], [13, 13, 2]],
+    #     group_size=[4096, 2048, 1024, 512],
+    #     direction=["x", "y"],
+    #     diff_scale=0.2,
+    #     diffusion=True,
+    #     shift=True,
+    #     operator_name="Mamba",
+    #     operator_cfg=dict(d_state=16, d_conv=4, expand=2, drop_path=0.2),
+    # ),
     neck=dict(
         type="RPN",
         layer_nums=[5, 5],
@@ -57,7 +82,9 @@ model = dict(
         ds_num_filters=[128, 256],
         us_layer_strides=[1, 2],
         us_num_filters=[256, 256],
-        num_input_features=128,
+        # Bumped from 128 -> 256 to match SpMiddleResNetFHD output channels
+        # (LION backbone emitted 128). Restore to 128 if you re-enable LION.
+        num_input_features=256,
         logger=logging.getLogger("RPN"),
     ),
     bbox_head=dict(

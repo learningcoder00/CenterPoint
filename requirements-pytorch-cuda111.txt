@@ -1,0 +1,4 @@
+# PyTorch 1.9 + CUDA 11.1（与 README 一致；wheel 来自 PyTorch 官方归档）
+-f https://download.pytorch.org/whl/torch_stable.html
+torch==1.9.0+cu111
+torchvision==0.10.0+cu111
