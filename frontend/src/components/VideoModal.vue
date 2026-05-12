@@ -32,6 +32,28 @@
                     <source :src="videoSrc" type="video/mp4">
                     Your browser does not support the video tag.
                   </video>
+                  <button
+                    type="button"
+                    class="fs-btn"
+                    :class="{ 'is-on': isFullscreen }"
+                    :disabled="!videoSrc"
+                    :title="isFullscreen ? 'Exit fullscreen' : 'Fullscreen video'"
+                    :aria-label="isFullscreen ? 'Exit fullscreen' : 'Fullscreen video'"
+                    @click="toggleFullscreen"
+                  >
+                    <svg v-if="!isFullscreen" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M4 9V5a1 1 0 0 1 1-1h4" />
+                      <path d="M20 9V5a1 1 0 0 0-1-1h-4" />
+                      <path d="M4 15v4a1 1 0 0 0 1 1h4" />
+                      <path d="M20 15v4a1 1 0 0 1-1 1h-4" />
+                    </svg>
+                    <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M9 4v4a1 1 0 0 1-1 1H4" />
+                      <path d="M15 4v4a1 1 0 0 0 1 1h4" />
+                      <path d="M9 20v-4a1 1 0 0 0-1-1H4" />
+                      <path d="M15 20v-4a1 1 0 0 1 1-1h4" />
+                    </svg>
+                  </button>
                 </div>
 
                 <div class="player-shell">
@@ -76,16 +98,6 @@
                       </button>
                       <button type="button" class="player-btn" :disabled="!duration" title="Seek +1s (→)" @click="seekBy(1)">+1s</button>
                       <button type="button" class="player-btn" :disabled="!duration" title="Next frame" @click="stepFrames(1)">Frame ⏭</button>
-                      <div v-if="isCompareJob" class="side-picker" role="group" aria-label="Marker side">
-                        <span class="side-picker__label">Side</span>
-                        <button
-                          v-for="opt in sideOptions"
-                          :key="opt.value"
-                          type="button"
-                          :class="['side-picker__btn', `side-picker__btn--${opt.value}`, { active: nextMarkerSide === opt.value }]"
-                          @click="nextMarkerSide = opt.value"
-                        >{{ opt.label }}</button>
-                      </div>
                       <button type="button" class="player-btn bug-btn" :disabled="!duration" title="Add bug at current time (B)" @click="addMarkerAtCurrentTime">
                         🐞 Add bug (B)
                       </button>
@@ -346,19 +358,13 @@ const isPlaying = ref(false)
 const isSeeking = ref(false)
 const dragRatio = ref(0)
 const wasPlayingBeforeSeek = ref(false)
+const isFullscreen = ref(false)
 
 const noteText = ref('')
 const markers = ref([])
 const annotationLoading = ref(false)
 const annotationSaving = ref(false)
 const saveState = ref('idle')
-
-const nextMarkerSide = ref('both')
-const sideOptions = [
-  { value: 'a', label: 'A' },
-  { value: 'b', label: 'B' },
-  { value: 'both', label: 'Both' },
-]
 
 /**
  * Stitched BEV/Cameras videos are encoded at ~10 fps (see start_server stitching).
@@ -596,6 +602,40 @@ function togglePlay() {
   }
 }
 
+/**
+ * Browser fullscreen for the <video> element. We deliberately target the
+ * video itself (not the modal container) so the OS gives the user the full
+ * native player surface; native controls are toggled on while in FS so play
+ * / seek / volume remain reachable without our custom toolbar.
+ */
+async function toggleFullscreen() {
+  const v = videoRef.value
+  if (!v) return
+  try {
+    if (!isFullscreen.value) {
+      const req = v.requestFullscreen || v.webkitRequestFullscreen || v.webkitEnterFullscreen || v.msRequestFullscreen
+      if (req) await req.call(v)
+    } else {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen
+      if (exit) await exit.call(document)
+    }
+  } catch (e) {
+    console.warn('Fullscreen toggle failed:', e)
+  }
+}
+
+function onFullscreenChange() {
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement
+  isFullscreen.value = !!fsEl && fsEl === videoRef.value
+  if (videoRef.value) {
+    if (isFullscreen.value) {
+      videoRef.value.setAttribute('controls', '')
+    } else {
+      videoRef.value.removeAttribute('controls')
+    }
+  }
+}
+
 function addMarkerAtTime(timeSec) {
   if (!duration.value) return
   markers.value = [
@@ -604,7 +644,7 @@ function addMarkerAtTime(timeSec) {
       id: makeMarkerId(),
       timeSec: Math.max(0, Math.min(duration.value, Number(timeSec || 0))),
       type: 'bug',
-      side: isCompareJob.value ? nextMarkerSide.value : 'both',
+      side: 'both',
     },
   ]
   saveState.value = 'idle'
@@ -684,13 +724,22 @@ function resetPlayerState() {
   dragRatio.value = 0
 }
 
+/** Bail out of fullscreen — used before the modal closes / unmounts. */
+function exitFullscreenIfActive() {
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement
+  if (!fsEl) return
+  try {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen
+    if (exit) exit.call(document)
+  } catch { /* ignore */ }
+}
+
 function resetAnnotationState() {
   noteText.value = ''
   markers.value = []
   annotationLoading.value = false
   annotationSaving.value = false
   saveState.value = 'idle'
-  nextMarkerSide.value = 'both'
 }
 
 function resetReviewState() {
@@ -747,6 +796,7 @@ watch(
   () => [props.visible, props.job?.job_id],
   async ([visible]) => {
     if (!visible) {
+      exitFullscreenIfActive()
       if (videoRef.value) videoRef.value.pause()
       resetPlayerState()
       resetAnnotationState()
@@ -765,12 +815,17 @@ watch(
 
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange)
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('mousemove', onGlobalMouseMove)
   window.removeEventListener('mouseup', stopSeek)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
+  exitFullscreenIfActive()
   if (videoRef.value) videoRef.value.pause()
 })
 </script>
@@ -919,6 +974,71 @@ onUnmounted(() => {
   border-radius: 12px;
   background: #02040a;
   object-fit: contain;
+}
+
+/* Fullscreen video uses the browser's native player size; reset our max-height
+   constraint so the OS gives us the entire viewport. */
+.video-player:fullscreen,
+.video-player:-webkit-full-screen {
+  max-height: none;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  background: #000;
+}
+
+.fs-btn {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 13, 22, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #f0f6ff;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity .18s var(--ease-out),
+    transform .18s var(--ease-out),
+    background .18s var(--ease-out),
+    border-color .18s var(--ease-out);
+  z-index: 2;
+}
+
+.video-container:hover .fs-btn,
+.fs-btn:focus-visible,
+.fs-btn.is-on {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.fs-btn:hover {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: rgba(125, 211, 252, 0.55);
+  color: #e0f2fe;
+}
+
+.fs-btn:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.fs-btn:disabled {
+  opacity: 0;
+  cursor: not-allowed;
+}
+
+.fs-btn.is-on {
+  background: rgba(125, 211, 252, 0.32);
+  border-color: rgba(125, 211, 252, 0.7);
+  color: #e0f2fe;
 }
 
 .player-shell {
@@ -1097,38 +1217,6 @@ onUnmounted(() => {
   opacity: 0.5;
   cursor: not-allowed;
 }
-
-.side-picker {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel);
-}
-.side-picker__label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.side-picker__btn {
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background .15s var(--ease-out), color .15s var(--ease-out), border-color .15s var(--ease-out);
-}
-.side-picker__btn:hover { color: var(--text); background: var(--nav-hover); }
-.side-picker__btn--a.active   { color: #0a0d16; background: #38bdf8; border-color: #38bdf8; }
-.side-picker__btn--b.active   { color: #0a0d16; background: #f472b6; border-color: #f472b6; }
-.side-picker__btn--both.active{ color: #0a0d16; background: #facc15; border-color: #facc15; }
 
 .keymap-row {
   margin-top: 14px;

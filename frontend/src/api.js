@@ -68,6 +68,10 @@ export async function fetchJobs() {
   return request('/api/jobs')
 }
 
+export async function fetchJob(jobId) {
+  return request(`/api/jobs/${encodeURIComponent(jobId)}`)
+}
+
 export async function deleteJob(jobId) {
   return request(`/api/jobs/${jobId}`, { method: 'DELETE' })
 }
