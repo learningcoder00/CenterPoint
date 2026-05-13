@@ -301,8 +301,8 @@ CenterPoint/
 ├── data/
 │   └── nuScenes -> /path/to/dataset  # symlink or directory
 ├── work_dirs/
-│   ├── clip_jobs.db                  # SQLite DB (jobs + tags)
-│   └── vis_jobs/<job_id>/            # per-job output frames and MP4
+│   └── clip_jobs.db                  # SQLite DB (jobs + tags)
+├── vis_jobs/<job_id>/                # per-job output frames and MP4
 └── start_server.sh                   # one-command launcher
 ```
 

@@ -117,15 +117,17 @@
             </div>
 
             <div class="side-panel">
-              <div v-if="job?.status === 'completed'" class="review-panel">
+              <div v-if="job?.status === 'completed' && !isCompareJob" class="review-panel">
                 <div class="review-panel__head">
-                  <div class="section-title">Review verdict</div>
+                  <div class="review-title-block">
+                    <div class="section-title review-title">Review verdict</div>
+                    <p class="review-hint">Mark this visualization job for triage lists.</p>
+                  </div>
                   <span :class="['verdict-pill', currentVerdictClass]" aria-live="polite">
                     <span class="verdict-pill__dot"></span>
                     {{ reviewStatusLabel }}
                   </span>
                 </div>
-                <p class="review-hint">Mark this visualization job for triage lists on the Review page.</p>
                 <div class="review-actions" role="group" aria-label="Verdict">
                   <button
                     type="button"
@@ -469,7 +471,7 @@ function makeMarkerId() {
 
 async function loadReview() {
   const jobId = props.job?.job_id
-  if (!jobId || props.job?.status !== 'completed') return
+  if (!jobId || props.job?.status !== 'completed' || isCompareJob.value) return
   reviewLoading.value = true
   reviewError.value = ''
   try {
@@ -1296,31 +1298,52 @@ onUnmounted(() => {
 .review-panel {
   position: relative;
   background:
-    radial-gradient(420px 180px at 0% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
+    radial-gradient(360px 180px at 0% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 62%),
+    linear-gradient(180deg, color-mix(in srgb, #ffffff 4%, transparent), transparent 36%),
     var(--panel-alt);
-  padding: 16px;
-  border-radius: 16px;
-  border: 1px solid var(--border);
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
   overflow: hidden;
+}
+
+.review-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(125, 211, 252, 0.46), transparent);
+  pointer-events: none;
 }
 
 .review-panel__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 4px;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.review-title-block {
+  min-width: 0;
+}
+
+.review-panel .review-title {
+  margin-bottom: 5px;
+  color: var(--text);
+  letter-spacing: .14em;
 }
 
 .verdict-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px 4px 8px;
+  flex: 0 0 auto;
+  padding: 5px 11px 5px 9px;
   border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   border: 1px solid var(--border);
   color: var(--muted);
@@ -1328,8 +1351,8 @@ onUnmounted(() => {
 }
 
 .verdict-pill__dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: currentColor;
   box-shadow: 0 0 8px currentColor;
@@ -1352,19 +1375,20 @@ onUnmounted(() => {
 }
 
 .review-hint {
-  margin: 6px 0 14px;
+  margin: 0;
   font-size: 12px;
   color: var(--muted);
+  line-height: 1.45;
 }
 
 .review-actions {
   display: flex;
   gap: 6px;
-  margin-bottom: 12px;
-  padding: 4px;
+  margin-bottom: 14px;
+  padding: 5px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--panel) 60%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 68%, transparent);
 }
 
 .review-btn {
@@ -1374,12 +1398,13 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 9px 10px;
-  border-radius: 9px;
+  min-height: 34px;
+  padding: 8px 10px;
+  border-radius: 10px;
   border: 0;
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .02em;
+  font-weight: 800;
+  letter-spacing: .03em;
   cursor: pointer;
   background: transparent;
   color: var(--muted);
@@ -1431,17 +1456,17 @@ onUnmounted(() => {
 
 .review-note {
   width: 100%;
-  min-height: 78px;
+  min-height: 84px;
   resize: vertical;
-  padding: 11px 13px;
-  border-radius: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  background: color-mix(in srgb, var(--panel) 84%, transparent);
   color: var(--text);
   font-family: inherit;
   font-size: 13px;
   line-height: 1.5;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   transition:
     border-color .2s var(--ease-out),
     background .2s var(--ease-out),
@@ -1455,15 +1480,19 @@ onUnmounted(() => {
 }
 
 .btn-save-review {
-  padding: 9px 14px;
-  border-radius: 11px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 12px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 70%, transparent);
   color: var(--text);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  margin-bottom: 8px;
+  margin-bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition:
     background .18s var(--ease-out),
     border-color .18s var(--ease-out),
@@ -1485,15 +1514,17 @@ onUnmounted(() => {
 
 .review-cta-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   align-items: center;
-  margin-bottom: 8px;
+  justify-content: space-between;
+  margin-bottom: 10px;
 }
 
 .btn-ask-ai {
-  padding: 9px 14px;
-  border-radius: 11px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 12px;
   border: 1px solid rgba(192, 132, 252, 0.4);
   background: linear-gradient(180deg, rgba(192, 132, 252, 0.22), rgba(192, 132, 252, 0.10));
   color: #ede9fe;
@@ -1526,9 +1557,12 @@ onUnmounted(() => {
 }
 
 .review-status {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
-  margin-top: 4px;
+  min-height: 20px;
+  padding-top: 2px;
 }
 
 .review-status.subtle {

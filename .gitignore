@@ -18,6 +18,7 @@ venv/
 .vscode/
 debug/
 work_dirs/
+vis_jobs/
 node_modules/
 backend/target/
 *.jar

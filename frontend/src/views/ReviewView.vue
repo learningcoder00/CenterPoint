@@ -394,7 +394,11 @@ onUnmounted(() => {
 .btn-refresh {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+  min-height: 50px;
+  padding-block: 0;
+  border-radius: 16px;
 }
 
 .stats .value.issue { color: var(--review-issue); }

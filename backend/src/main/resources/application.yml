@@ -19,7 +19,7 @@ app:
   checkpoint: ""
   python-executable: python
   vis-script: tools/visualize_results.py
-  jobs-dir: work_dirs/vis_jobs
+  jobs-dir: vis_jobs
   clips-meta: clip_preview/clips_meta_mini_val.json
   vue-dist: frontend/dist
   siliconflow-api-key: ${SILICONFLOW_API_KEY:}

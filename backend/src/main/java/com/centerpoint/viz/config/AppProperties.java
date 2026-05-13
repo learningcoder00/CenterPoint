@@ -10,7 +10,7 @@ public class AppProperties {
     private String checkpoint = "";
     private String pythonExecutable = "python";
     private String visScript = "tools/visualize_results.py";
-    private String jobsDir = "work_dirs/vis_jobs";
+    private String jobsDir = "vis_jobs";
     private String clipsMeta = "clip_preview/clips_meta.json";
     private String vueDist = "frontend/dist";
     private String siliconflowApiKey = "";

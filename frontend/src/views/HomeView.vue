@@ -62,7 +62,7 @@
         <div class="kpi-value">{{ kpis.running }}</div>
         <div class="kpi-sub">
           <span class="dot dot-pending"></span> {{ kpis.pending }} pending
-          <span class="dot dot-stitching"></span> {{ kpis.stitching }} stitching
+          <span class="dot dot-running"></span> {{ kpis.runningOnly }} running
         </div>
         <router-link class="kpi-link" to="/results">Open Results →</router-link>
       </article>
@@ -107,18 +107,20 @@
             <div class="ti-body">
               <div class="ti-row1">
                 <span class="ti-clip">{{ job.clip_id }}</span>
-                <span :class="['ti-status', job.status]">{{ fmtStatus(job.status) }}</span>
               </div>
               <div class="ti-row2">
                 <span class="ti-mode">{{ formatVisualizationMode(job.visualization_mode) }}</span>
                 <span class="ti-time">{{ fmtTime(job.updated_at || job.created_at) }}</span>
               </div>
             </div>
-            <router-link
-              v-if="job.status === 'completed'"
-              class="ti-cta"
-              :to="job.visualization_mode === 'bev_compare' ? '/compare' : '/results'"
-            >Open</router-link>
+            <div :class="['ti-side', { 'ti-side--completed': job.status === 'completed' }]">
+              <router-link
+                v-if="job.status === 'completed'"
+                class="ti-cta"
+                :to="job.visualization_mode === 'bev_compare' ? '/compare' : '/results'"
+              >Open</router-link>
+              <span :class="['ti-status', job.status]">{{ fmtStatus(job.status) }}</span>
+            </div>
           </li>
         </ul>
       </article>
@@ -151,9 +153,10 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { fetchAIOptimizations, fetchConfig, fetchJobs } from '../api.js'
+import { fetchAIOptimizations, fetchClips, fetchConfig, fetchJobs } from '../api.js'
 import { fmtStatus, fmtTime } from '../utils.js'
 
+const clips = ref([])
 const jobs = ref([])
 const optimizations = ref([])
 const serverConfig = ref({})
@@ -180,14 +183,16 @@ const datasetCount = computed(() => {
 const kpis = computed(() => {
   const all = jobs.value || []
   const completed = all.filter((j) => j.status === 'completed')
+  const resultsCompleted = completed.filter((j) => j.visualization_mode !== 'bev_compare')
   return {
-    clips: new Set(all.map((j) => j.clip_id).filter(Boolean)).size || (serverConfig.value.clip_count ?? '—'),
-    running: all.filter((j) => j.status === 'running').length,
+    clips: clips.value.length || serverConfig.value.clip_count || serverConfig.value.clipCount || '—',
+    running: all.filter((j) => j.status === 'pending' || j.status === 'running').length,
+    runningOnly: all.filter((j) => j.status === 'running').length,
     pending: all.filter((j) => j.status === 'pending').length,
     stitching: all.filter((j) => j.status === 'stitching').length,
-    issues: completed.filter((j) => j.review_status === 'has_issue').length,
-    clean: completed.filter((j) => j.review_status === 'no_issue').length,
-    awaitingReview: completed.filter((j) => !j.review_status || j.review_status === 'unreviewed').length,
+    issues: resultsCompleted.filter((j) => j.review_status === 'has_issue').length,
+    clean: resultsCompleted.filter((j) => j.review_status === 'no_issue').length,
+    awaitingReview: resultsCompleted.filter((j) => !j.review_status || j.review_status === 'unreviewed').length,
     aiRequests: optimizations.value.length,
     aiUniqueClips: new Set(optimizations.value.map((o) => getClipId(o)).filter(Boolean)).size,
   }
@@ -223,11 +228,13 @@ function truncate(text, max) {
 async function loadAll(silent = false) {
   if (!silent) loading.value = true
   try {
-    const [jobData, cfgData, optData] = await Promise.all([
+    const [clipsData, jobData, cfgData, optData] = await Promise.all([
+      fetchClips().catch(() => ({ clips: [] })),
       fetchJobs().catch(() => ({ jobs: [] })),
       fetchConfig().catch(() => ({})),
       fetchAIOptimizations().catch(() => ({ optimizations: [] })),
     ])
+    clips.value = clipsData.clips || []
     jobs.value = jobData.jobs || []
     serverConfig.value = cfgData || {}
     optimizations.value = optData.optimizations || []
@@ -253,7 +260,7 @@ onUnmounted(() => {
 .home-view {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 18px;
 }
 
 .hero {
@@ -261,6 +268,8 @@ onUnmounted(() => {
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
   gap: 24px;
   align-items: stretch;
+  margin-bottom: 2px;
+  padding-bottom: 14px;
 }
 
 .hero-copy h1 {
@@ -458,6 +467,7 @@ onUnmounted(() => {
 }
 
 .dot-pending { background: #facc15; box-shadow: 0 0 8px rgba(250, 204, 21, .6); }
+.dot-running { background: #38bdf8; box-shadow: 0 0 8px rgba(56, 189, 248, .6); }
 .dot-stitching { background: #94a3b8; box-shadow: 0 0 8px rgba(148, 163, 184, .55); }
 
 .kpi-link {
@@ -541,7 +551,7 @@ onUnmounted(() => {
 .timeline-item {
   position: relative;
   display: grid;
-  grid-template-columns: 12px 1fr auto;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 12px 14px;
@@ -572,6 +582,21 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
+.ti-side {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+  align-self: center;
+}
+
+.ti-side--completed {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
 .ti-clip {
   font-weight: 700;
   color: var(--text);
@@ -582,6 +607,9 @@ onUnmounted(() => {
 }
 
 .ti-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;

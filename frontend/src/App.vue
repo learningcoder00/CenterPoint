@@ -4,15 +4,45 @@
       <div class="topbar__left">
         <nav class="nav" aria-label="Primary">
           <router-link to="/home" class="nav-link nav-link--home">
-            <span class="nav-home-icon" aria-hidden="true">⌂</span> Home
+            <span class="nav-icon nav-home-icon" aria-hidden="true">⌂</span>
+            <span class="nav-text">Home</span>
           </router-link>
-          <router-link to="/clips">Clips</router-link>
-          <router-link to="/results">Results</router-link>
+          <router-link to="/clips" class="nav-link">
+            <span class="nav-icon nav-icon--svg" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <rect x="5" y="6" width="14" height="12" rx="2" />
+                <path d="M8 6v12M16 6v12M5 10h3M5 14h3M16 10h3M16 14h3" />
+              </svg>
+            </span>
+            <span class="nav-text">Clips</span>
+          </router-link>
+          <router-link to="/results" class="nav-link">
+            <span class="nav-icon nav-icon--svg" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M6 18V11M12 18V6M18 18v-9" />
+                <path d="M5 18h14" />
+              </svg>
+            </span>
+            <span class="nav-text">Results</span>
+          </router-link>
           <router-link to="/compare" class="nav-link nav-link--compare">
-            <span class="nav-compare-icon">⇆</span> Compare
+            <span class="nav-icon nav-icon--svg nav-compare-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M7 7h10l-3-3" />
+                <path d="M17 17H7l3 3" />
+                <path d="M17 7l-3 3M7 17l3-3" />
+              </svg>
+            </span>
+            <span class="nav-text">Compare</span>
           </router-link>
-          <router-link to="/review">Review</router-link>
-          <router-link to="/ai-optimization">AI Optimization</router-link>
+          <router-link to="/review" class="nav-link">
+            <span class="nav-icon" aria-hidden="true">✓</span>
+            <span class="nav-text">Review</span>
+          </router-link>
+          <router-link to="/ai-optimization" class="nav-link nav-link--ai">
+            <span class="nav-icon" aria-hidden="true">✦</span>
+            <span class="nav-text">AI Optimization</span>
+          </router-link>
         </nav>
       </div>
 
@@ -126,21 +156,22 @@ watch(theme, (nextTheme) => {
   align-items: center;
 }
 
+.nav-icon--svg svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .nav-link--compare .nav-compare-icon {
-  display: inline-block;
-  margin-right: 4px;
-  font-weight: 900;
-  background: linear-gradient(135deg, #38bdf8, #f472b6);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: #c084fc;
 }
 
 .nav-link--home .nav-home-icon {
-  display: inline-block;
-  margin-right: 4px;
-  font-weight: 900;
-  color: var(--accent);
   transform: translateY(-1px);
 }
 

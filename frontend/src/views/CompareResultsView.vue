@@ -105,7 +105,6 @@
         v-for="j in filtered" :key="j.job_id"
         :job="j"
         :show-star-toggle="true"
-        :show-review="true"
         :selectable="selectMode"
         :selected="selectedIds.has(j.job_id)"
         @play-video="openVideo"
